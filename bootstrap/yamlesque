@@ -1,0 +1,184 @@
+#!/usr/bin/env bash
+
+
+# print a data collection
+print_collection() {
+
+    # helper to get array value at key
+    value() { eval echo \${$1[$2]}; }
+
+    for k in $(value $1 keys)
+    do
+        echo "$2$k = $(value $1 $k)"
+    done
+
+    for c in $(value $1 children)
+    do
+        echo -e "$2$c\n$2{"
+        print_collection $c "  $2"
+        echo "$2}"
+    done
+}
+
+unset_collection() {
+
+    remove_from_parent() {
+        parent_arr=$( echo ${1[parent]} )
+
+    }
+
+    kvalue="children"
+    if [[ ! " ${karray[*]} " =~ " ${kvalue} " ]]; then
+        unset ${karray}
+        remove_from_parent $karray
+    fi
+}
+
+yay_parse() {
+
+   # find input file
+   for f in "$1" "$1.yay" "$1.yml"
+   do
+     [[ -f "$f" ]] && input="$f" && break
+   done
+   [[ -z "$input" ]] && exit 1
+
+   # use given dataset prefix or imply from file name
+   [[ -n "$2" ]] && local prefix="$2" || {
+     local prefix=$(basename "$input"); prefix=${prefix%.*}
+   }
+
+   echo "declare -g -A $prefix;"
+
+   local s='[[:space:]]*' w='[a-zA-Z0-9_]*' fs=$(echo @|tr @ '\034')
+   sed -n -e "s|^\($s\)\($w\)$s:$s\"\(.*\)\"$s\$|\1$fs\2$fs\3|p" \
+          -e "s|^\($s\)\($w\)$s:$s\(.*\)$s\$|\1$fs\2$fs\3|p" "$input" |
+   awk -F$fs '{
+      indent       = length($1)/2;
+      key          = $2;
+      value        = $3;
+
+      # No prefix or parent for the top level (indent zero)
+      root_prefix  = "'$prefix'_";
+      if (indent ==0 ) {
+        prefix = "";          parent_key = "'$prefix'";
+      } else {
+        prefix = root_prefix; parent_key = keys[indent-1];
+      }
+
+      keys[indent] = key;
+
+      # remove keys left behind if prior row was indented more than this row
+      for (i in keys) {if (i > indent) {delete keys[i]}}
+
+      if (length(value) > 0) {
+         # value
+         printf("%s%s[%s]=\"%s\";\n", prefix, parent_key , key, value);
+         printf("%s%s[keys]+=\" %s\";\n", prefix, parent_key , key);
+      } else {
+         # collection
+         printf("%s%s[children]+=\" %s%s\";\n", prefix, parent_key , root_prefix, key);
+         printf("declare -g -A %s%s;\n", root_prefix, key);
+         printf("%s%s[parent]=\"%s%s\";\n", root_prefix, key, prefix, parent_key);
+      }
+   }'
+}
+
+yay_parse_dev() {
+    # find input file
+    for f in "${1}" "${1}.yay" "${1}.yml"
+    do  
+        [[ -f "${f}" ]] && input="${f}" && break
+    done
+    [[ -z "${input}" ]] && exit 1
+
+    # use given dataset prefix or imply from file name
+    [[ ! -z "${2}" ]] && local prefix="${2}" || {
+        local prefix=$(basename "${input}"); prefix=${prefix%.*}
+    }   
+
+    echo "unset ${prefix};"
+    echo "declare -g -A ${prefix};"
+    #echo "${input}" "${prefix}"
+
+    local s='[[:space:]]*'
+    # match all keys with
+    #    a-z, A-Z, 0-9
+    # and special characters: ~ / . 
+    local w='[a-zA-Z0-9_~\/\.]*'
+    local fs='»'  #fs=$(echo @|tr @ '\034')
+    #echo "Process the input file."
+    sed -n -e "s|^\($s\)\($w\)$s:$s\"\(.*\)\"$s\$|\1$fs\2$fs\3|p" \
+           -e "s|^\($s\)\($w\)$s:$s\(.*\)$s\$|\1$fs\2$fs\3|p" "${input}" |
+    awk -F$fs '{
+        indent       = length($1)/4;
+        dirtykey     = $2;
+        value        = $3;
+        key  = dirtykey
+        nsub = gsub("[~\/\.]", "", key)
+        if (nsub > 0) {
+            value = dirtykey
+        }
+
+        # No prefix or parent for the top level (indent zero)
+        root_prefix  = "'$prefix'_";
+        if (indent ==0 ) {
+            prefix = "";          parent_key = "'$prefix'";
+        } else {
+            prefix = root_prefix; parent_key = keys[indent-1];
+        }
+
+        keys[indent] = key;
+
+        #printf ("\n\nDebug>>\n")
+
+        # remove keys left behind if prior row was indented more than this row
+        #for (i in keys) {if (i > indent) {delete keys[i]}}
+
+        #printf("%s|%d --> Parent: %s, Key: %s, Value: %s, Length: %d\n", $1, indent, parent_key, key, value, length(value));
+
+        #printf("%s|%d --> Key: %s, Dirtykey: %s, #sub: %d\n", $1, indent, key, dirtykey, nsub);
+        #print ("=== Keys ===");
+        #for (i in keys) { print keys[i] };
+        #print ("============");
+
+        if (length(value) > 0) {
+        # value
+            printf("%s%s[%s]=\"%s\";\n", prefix, parent_key , key, value);
+            printf("%s%s[keys]+=\" %s\";\n", prefix, parent_key , key);
+        } else {
+            # collection
+            printf("%s%s[children]+=\" %s%s\";\n", prefix, parent_key , root_prefix, key);
+            printf("declare -g -A %s%s;\n", root_prefix, key);
+            printf("%s%s[parent]=\"%s%s\";\n", root_prefix, key, prefix, parent_key);
+        }
+
+    }'
+}
+
+# Array mapper. Calls map_fn for each item ($1) and index ($2) in array, and
+# prints whatever map_fn prints. If map_fn is omitted, all input array items
+# are printed.
+# Usage: array_map array_name [map_fn]
+function array_map() {
+    local __i__ __val__ __arr__=$1; shift
+    for __i__ in $(eval echo "\${!$__arr__[@]}"); do
+        __val__="$(eval echo "\"\${$__arr__[__i__]}\"")"
+        if [[ "$1" ]]; then
+            "$@" "$__val__" $__i__
+        else
+            echo "$__val__"
+        fi
+    done
+}
+
+# Print bash array in the format "i <val>" (one per line) for debugging.
+function array_print() { array_map $1 __array_print; }
+function __array_print() { echo "$2 <$1>"; }
+
+
+
+function yay() { eval $(yay_parse_dev "$@"); }
+
+#yay_parse_dev install_mwe dotboot
+#yay install_mwe dotboot
