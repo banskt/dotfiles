@@ -3,8 +3,8 @@
 # for examples
 
 # Always load these functions and alias
-if [ -f ~/.bashd/always.bashrc ]; then 
-    . ~/.bashd/always.bashrc
+if [ -f ~/.bashd/common.bashrc ]; then 
+    . ~/.bashd/common.bashrc
 fi
 
 # Load login specific utilities
@@ -21,28 +21,6 @@ case $- in
 esac
 if [ -f ~/.bashd/interactive.bashrc ]; then
     . ~/.bashd/interactive.bashrc
-fi
-
-
-
-if [ -f ~/.bash_aliases ]; then
-    . ~/.bash_aliases
-fi
-
-# enable programmable completion features (you don't need to enable
-# this, if it's already enabled in /etc/bash.bashrc and /etc/profile
-# sources /etc/bash.bashrc).
-if ! shopt -oq posix; then
-  if [ -f /usr/share/bash-completion/bash_completion ]; then
-    . /usr/share/bash-completion/bash_completion
-  elif [ -f /etc/bash_completion ]; then
-    . /etc/bash_completion
-  fi
-fi
-
-# Use my aliases
-if [ -f ~/saikat_bashrc ]; then
- . ~/saikat_bashrc
 fi
 
 # >>> conda initialize >>>
