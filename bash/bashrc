@@ -2,16 +2,43 @@
 # see /usr/share/doc/bash/examples/startup-files (in the package bash-doc)
 # for examples
 
-# Always load these functions and alias
-if [ -f ~/.bashd/common.bashrc ]; then 
-    . ~/.bashd/common.bashrc
-fi
+export DOTFILES=~/.dotfiles
+
+# source specific .bashrc files
+function dotbashrc() {
+    local file
+    if [[ "${1}" ]]; then
+        file="${DOTFILES}/bash/${1}.bashrc"
+        if [ -f ${file} ]; then
+            source "${file}"
+        fi
+    fi
+}
+
+# Source all files in "bash"
+function dotsrc() {
+    local file
+    if [[ "${1}" ]]; then
+        file="${DOTFILES}/bash/${1}.sh"
+        if [ -f ${file} ]; then
+            source "${file}"
+        fi
+    else
+        for file in ${DOTFILES}/bash/*.sh; do
+            source "$file"
+        done
+    fi
+}
+
+# Always load all functions
+dotsrc 
+
+# Common initialization
+dotbashrc common
 
 # Load login specific utilities
 if shopt -q login_shell; then
-    if [ -f ~/.bashd/login.bashrc ]; then
-        . ~/.bashd/login.bashrc
-    fi
+    dotbashrc login
 fi
 
 # If not running interactively, do not load interactive functions
@@ -19,9 +46,7 @@ case $- in
     *i*) ;;
       *) return ;;
 esac
-if [ -f ~/.bashd/interactive.bashrc ]; then
-    . ~/.bashd/interactive.bashrc
-fi
+dotbashrc interactive
 
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!
