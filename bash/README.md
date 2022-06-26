@@ -3,10 +3,36 @@
 Almost everything in this repository is a bash utility.
 Here's a couple of quick reminders about Bash.
 
+## Types of bash shells
+
+**Login shell** 
+> The first process that executes under our user ID when we log in to a session. The login process tells the shell to behave as a login shell with a convention: passing argument 0, which is normally the name of the shell executable, with a "-" character prepended.
+
+Check: `shopt login_shell` (for BASH only)
+
+**Interactive shell**
+> Reads commands from user input on a tty. Among other things, such a shell reads startup files on activation, displays a prompt, and enables job control by default. The user can interact with the shell. A shell running a script is always a non-interactive shell.
+
+Check: `[[ $- == *i* ]] && echo "Interactive" || echo "Non-interactive"`
+
+How do you access the different shell types?
+
+|               | interactive                | non-interactive                    |
+|---------------|----------------------------|------------------------------------|
+| **login**     | tty (Ctrl + Alt + F1), ssh | Rare (see note below)              |
+| **non-login** | Open a new terminal        | Shell scripts, `./script.sh`       |
+
+Non-interactive login shells are rare. For example, you can run `script.sh` in a non-interactive login shell using 
+`bash -l -c 'source script.sh'`. `bash -l` opens a bash login shell and `-c 'source script.sh'` runs the command in that shell
+non-interactively and exits the shell. 
+
+See discussion at [AskUbuntu](https://askubuntu.com/questions/879364).
+
+
 ## Loading configuration files
 
 For details see the [Documentation](https://www.gnu.org/savannah-checkouts/gnu/bash/manual/bash.html#Bash-Startup-Files). 
-Here is a quick summary:
+Here is a quick summary of initialization in bash:
 
 #### Interactive login shell, or non-interactive shell with `--login`
 
@@ -43,33 +69,8 @@ Invoked by the remote shell daemon, usually `rshd`, or the secure shell daemon `
 
 Note, however, neither `rshd` nor `sshd` generally invoke the shell with `--norc` / `--rcfile` or allow them to be specified.
 
-## Types of bash shells
-
-- Login shell: `shopt login_shell` (for BASH only)
-> The first process that executes under our user ID when we log in to a session. The login process tells the shell to behave as a login shell with a convention: passing argument 0, which is normally the name of the shell executable, with a “ - ” character prepended
-
-- Interactive shell: `echo $-` will include `i`
-> Reads commands from user input on a tty. Among other things, such a shell reads startup files on activation, displays a prompt, and enables job control by default. The user can interact with the shell. A shell running a script is always a non-interactive shell.
-
-|           | interactive                | non-interactive                   |
-|           | -------------------------- | --------------------------------- |
-| login     | tty (Ctrl + Alt + F1)      | Rare. `echo command | ssh server` |
-| non-login | Open a new terminal        | shell scripts. `./script.sh`      |
-| --------- | -------------------------- | --------------------------------- |
-
-More examples: 
- - `ssh` to a remote computer opens interactive login shell. 
- - `bash -l -c ./script.sh` runs `script.sh` in non-interactive login shell. 
-
-See discussion at [AskUbuntu](https://askubuntu.com/questions/879364).
 
 ![Bash startup file loading decision](../images/bash_startup_decision.png?raw=true "Bash startup file loading decision")
-
-## Ubuntu bash loading
-
-`/etc/profile`
-- read and execute `/etc/bash.bashrc`, if it exists.
-- read and execute all files in `/etc/profile.d`, if they exist.
 
 ## Quirks
 - `bash --norc` loads the environment variables already in the session.
@@ -88,3 +89,7 @@ Which files are read?
 - interactive non-login (desktop, laptop) : reads `/etc/bash.bashrc` and `~/.bashrc`.
 - non-interactive login :  reads `/etc/profile` and `~/.bashrc`.
 - non-interactive non-login : reads `$BASH_ENV`, which is set by `environment modules` to `/opt/environment-modules/init/bash`. Source `~/.bashrc` separately.
+
+## Ubuntu `/etc/profile`
+- read and execute `/etc/bash.bashrc`, if it exists.
+- read and execute all files in `/etc/profile.d`, if they exist.
