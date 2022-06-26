@@ -1,0 +1,39 @@
+#!/bin/bash
+
+# interactive login
+#   $ bash -l
+#   $ source shell_type.sh
+#   $ exit
+#
+# interactive non-login
+#   $ source shell_type.sh
+#   
+# non-interactive login
+#   $ bash -l -c 'source shell_type.sh'
+#
+# non-interactive non-login
+#   $ ./shell_type.sh
+
+
+echo "Bash commands: $-"
+shopt login_shell
+
+echo  "----------------------"
+
+case $- in
+    *i*) shell_type="interactive";;
+      *) shell_type="non-interactive";;
+esac
+shopt -q login_shell && shell_type="$shell_type login" || shell_type="$shell_type non-login"
+echo ${shell_type}
+echo  "----------------------"
+
+echo "ENV: ${ENV}"
+echo "BASH_ENV: ${ENV}"
+echo "PS1: ${PS1}"
+if [ "${PS1-}" ]; then
+    echo "looks like --> ${PS1@P}"
+fi
+[[ $( declare -f up ) ]] && echo "bashrc read" || echo "bashrc not read"
+[[ $( declare -f __read_etc_profile ) ]] && echo "/etc/profile is read"     || echo "/etc/profile not read"
+[[ $( declare -f __read_etc_bashrc )  ]] && echo "/etc/bash.bashrc is read" || echo "/etc/bash.bashrc not read"
