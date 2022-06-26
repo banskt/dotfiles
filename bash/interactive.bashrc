@@ -1,7 +1,7 @@
 #!/bin/bash
 
 set-bash-prompt
-set-terminal-title '$( hostname ): $( pwd )'
+set-terminal-title '$(hostname):  $(pwd-short)'
 
 # enable color support
 if [ -x /usr/bin/dircolors ]; then

@@ -2,7 +2,7 @@
 
 # show all available bash colors on the terminal
 #   $ show-bash-colors
-function show-bash-colors() {
+show-bash-colors() {
     for fgbg in 38 48 ; do # Foreground / Background
         for color in {0..255} ; do # Colors
             # Display the color
@@ -55,6 +55,13 @@ set-terminal-title() {
     PS1="${PS1_NO_TITLE}${ESCAPED_TITLE}"
 }
 
+pwd-short() {
+    local _homedir
+    _homedir=$( abs_path ~ | sed "s|\/|\\\/|g" )
+    pwd | sed "s|^\(${_homedir}\/\)\(.*\)|\~\/\2|g"
+}
+
+
 # Set a fancy bash prompt (non-color, unless we know we "want" color)
 #
 # see https://misc.flogisoft.com/bash/tip_colors_and_formatting
@@ -73,7 +80,7 @@ set-terminal-title() {
 #
 # Non-printable sequences should be enclosed in \[ and \]
 # see https://unix.stackexchange.com/questions/105958/terminal-prompt-not-wrapping-correctly
-function set-bash-prompt() {
+my-bash-prompt() {
     # is there color support?
     case "$TERM" in
         xterm-color|*-256color) color_prompt=yes;;
