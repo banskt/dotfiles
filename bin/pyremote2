@@ -1,51 +1,115 @@
 #!/bin/bash
 
-_do_open() {
-    [[ ! -z "${SERVER}" ]] || _show_help
-    remote_uri=$( _get_saved_connection ${SERVER} )
+_echo_steps() {
+    echo ""
+    echo ""
+    echo "-----------------------"
+    echo ${1}
+    echo "-----------------------"
+}
+
+
+_is_accessible_tmpdir() {
+    [[ -d "${TMPDIR}" ]] || mkdir -p ${TMPDIR}
+    if [[ ! -d "${TMPDIR}" ]]; then
+        echo "Could not create temporary directory ${TMPDIR}."
+        exit 1
+    fi
+    if [[ ! -w "${TMPDIR}" ]]; then
+        echo "${TMPDIR} is not writable."
+    fi
+}
+
+_local_port_forward () {
+    remote_uri=${1}
+    remote_host=${2}
+    exitcode=1
+    echo "Remote Jupyter server is running at: ${remote_uri}"
     if [[ ! -z "${remote_uri}" ]]; then
-        echo "Remote Jupyter server is already running."
-    else
-        ssh ${SERVER} './jupyter-serve --start'
-        remote_info=$( ssh ${SERVER} './jupyter-serve --get-uri-info' )
-        remote_uri=$( echo ${remote_info} | awk '{print $1}' )
-        remote_host=$( echo ${remote_info} | awk '{print $2}' )
-        echo "Remote Jupyter server is running at: ${remote_uri}"
-        if [[ ! -z "${remote_uri}" ]]; then
-            #remote_host=$(  echo "${remote_uri}" | sed -e "s/[^/]*\/\/\([^:]*\):\([^\?]*\)\/?token=\(.*\)/\1/" )
-            remote_port=$(  echo "${remote_uri}" | sed -e "s/[^/]*\/\/\([^:]*\):\([^\?]*\)\/?token=\(.*\)/\2/" )
-            remote_token=$( echo "${remote_uri}" | sed -e "s/[^/]*\/\/\([^:]*\):\([^\?]*\)\/?token=\(.*\)/\3/" )
-            echo "Host: ${remote_host}"
-            echo "Port: ${remote_port}"
-            echo "Token: ${remote_token}"
-            if [[ ! -z ${remote_port} ]]; then
-                ssh-localportfwd open ${SERVER} ${remote_port} ${remote_port} ${remote_host}
-                _do_save ${remote_uri}
-            else
-                echo "Error: Could not find remote port."
-            fi
+        #remote_host=$(  echo "${remote_uri}" | sed -e "s/[^/]*\/\/\([^:]*\):\([^\?]*\)\/?token=\(.*\)/\1/" )
+        remote_port=$(  echo "${remote_uri}" | sed -e "s/[^/]*\/\/\([^:]*\):\([^\?]*\)\/?token=\(.*\)/\2/" )
+        remote_token=$( echo "${remote_uri}" | sed -e "s/[^/]*\/\/\([^:]*\):\([^\?]*\)\/?token=\(.*\)/\3/" )
+        echo "Host: ${remote_host}"
+        echo "Port: ${remote_port}"
+        echo "Token: ${remote_token}"
+        if [[ ! -z ${remote_port} ]]; then
+            ssh-localportfwd open ${SERVER} ${remote_port} ${remote_port} && exitcode=0
         else
-            echo "Error: Could not find URI of remote server."
+            echo "Error: Could not find remote port."
         fi
     fi
+    [[ ${exitcode} == 0 ]] && return 0 || return 1
+}
+
+_do_open() {
+    
+    # show help and exit with error if no server is defined
+    [[ ! -z "${SERVER}" ]] || _show_help
+
+    exitcode=1
+
+    ## check if there is an existing remote server
+    remote_uri=$( _get_saved_connection ${SERVER} )
+    if [[ ! -z "${remote_uri}" ]]; then
+
+        _local_port_forward ${remote_uri} && exitcode=0
+
+    ## proceed if no saved remote server
+    else
+
+        # do not start if temporary directory is not accessible
+        _is_accessible_tmpdir
+
+        ssh ${SERVER} './jupyter-serve --start'
+        remote_info=$( ssh ${SERVER} './jupyter-serve --get-uri-host' )
+        remote_uri=$( echo ${remote_info} | awk '{print $1}' )
+        remote_host=$( echo ${remote_info} | awk '{print $2}' )
+
+        if _local_port_forward ${remote_uri}; then
+            _do_save ${remote_uri} && exitcode=0
+        fi
+    fi
+
+    if [[ ${exitcode} == 0 ]]; then
+        _echo_steps "How to access?"
+        echo "To access the notebook, open this URL in a browser:"
+        echo  ${remote_uri}
+        echo " "
+        return 0
+    else
+        return 1
+    fi
+
+}
+
+_do_kill() {
+    exitcode=1
+    if _do_close; then
+        if ssh ${SERVER} './jupyter-serve --stop'; then
+            _do_remove_saved && exitcode=0
+        else
+            echo "Could not kill remote Jupyter server."
+        fi
+    fi
+    [[ ${exitcode} == 0 ]] && return 0 || return 1
 }
 
 
 _do_close() {
     [[ ! -z "${SERVER}" ]] || _show_help
+    exitcode=1
     remote_uri=$( _get_saved_connection ${SERVER} )
     if [[ ! -z "${remote_uri}" ]]; then
         remote_port=$(  echo "${remote_uri}" | sed -e "s/[^/]*\/\/\([^:]*\):\([^\?]*\)\/?token=\(.*\)/\2/" )
         if [[ ! -z ${remote_port} ]]; then
-            ssh-localportfwd close ${SERVER} ${remote_port} ${remote_port}
-            [[ $? == 0 ]] && _do_remove_saved
-            ssh ${SERVER} './jupyter-serve --stop'
+            ssh-localportfwd close ${SERVER} ${remote_port} ${remote_port} && exitcode=0
         else
             echo "Error: Could not find remote port."
         fi
     else
         echo "Error: Could not find remote connection."
     fi
+    [[ ${exitcode} == 0 ]] && return 0 || return 1
 }
 
 _do_list() {
@@ -60,8 +124,14 @@ _do_list() {
 
 
 _do_save() {
-    [[ -d "${TMPDIR}" ]] || mkdir -p ${TMPDIR}
-    [[ ! -z "${1}" ]] && echo "${1}" > ${TMPDIR}/${SERVER}.remote
+    _is_accessible_tmpdir
+    if [[ ! -z "${1}" ]]; then
+        echo "${1}" > ${TMPDIR}/${SERVER}.remote 
+    else
+        echo "No remote connection information to save."
+        return 1
+    fi
+
 }
 
 
@@ -69,9 +139,11 @@ _is_saved_connection() {
     [[ -f ${TMPDIR}/${SERVER}.remote ]] && return 0 || return 1
 }
 
+
 _get_saved_connection() {
     _is_saved_connection && cat ${TMPDIR}/${SERVER}.remote
 }
+
 
 
 _do_remove_saved() {
@@ -80,12 +152,15 @@ _do_remove_saved() {
 
 
 _show_help() {
+    exitcode=1
+    [[ ! -z ${1} ]] && [[ ${1} == 0 ]] && exitcode=0
+    [[ $exitcode == 1 ]] && echo "Wrong command options."
     CMD="$( basename ${BASH_SOURCE[0]} )"
     echo "Open or close remote Jupyter Notebook server."
     echo "Usage:   "
     echo "   $CMD open  <user@server>"
     echo "   $CMD close <user@server>"
-    exit
+    [[ $exitcode == 0 ]] && exit 0 || exit 1
 }
 
 TMPDIR=~/.tmp/pyremote-server
@@ -99,12 +174,21 @@ case "${CMD}" in
         _show_help
         ;;
 
+    "help")
+        # exit without error
+        _show_help 0
+        ;;
+
     "open")
         _do_open
         ;;
 
     "close")
         _do_close
+        ;;
+
+    "kill")
+        _do_kill
         ;;
 
     "list")

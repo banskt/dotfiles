@@ -1,0 +1,25 @@
+#!/usr/bin/expect -f
+
+log_user 1
+
+# get password file and the command from input
+set passf [lindex $argv 0]
+set cmd   [lrange $argv 1 end]
+set cmd0  [lindex $cmd 0]
+
+# read password from password file
+set fp [open $passf r]
+# read includes file newline, hence using gets
+# to read line-by-line
+#set passwf [read $fp]
+#gets $fp username
+gets $fp passwf
+set passw [string trim $passwf]
+close $fp
+
+# debug, check which commands are being passed
+#puts "Main command: $cmd0"
+#puts "Full command: $cmd"
+#puts "Password file: $passf"
+puts "Password: <$passwf>"
+puts "Password trimmed: <$passw>"

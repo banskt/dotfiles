@@ -1,13 +1,26 @@
 #!/bin/bash
 
-CWD=$(pwd)
-SRCDIR=~/dotfiles
-TARGET=~/.dotfiles
+FILES=(.bashrc)
+DOTFILES=~/.dotfiles
 
-for mdir in 'bash'; do 
-    mkdir -p ${TARGET}/${mdir}
-    cd ${TARGET}/${mdir}
-    for file in ${SRCDIR}/${mdir}/*.sh     ; do ln -s --force ${file} .; done
-    for file in ${SRCDIR}/${mdir}/*.bashrc ; do ln -s --force ${file} .; done
-    cd ${CWD}
+# remember current location
+CWD=$( pwd )
+
+# provide path with respect to home
+cd ${HOME}
+
+for __file in ${FILES[@]}; do
+    if [[ -f ${__file} ]]; then
+        __linktgt=${DOTFILES}/bash/bashrc
+        # backup if this is not a link
+        if [[ ! -L ${__file} ]]; then 
+            __bakfile=${__file}_$( date +%Y-%m-%d )
+            cp ${__file} ${__bakfile}
+        fi
+        ln -s --force ${__linktgt} ${__file}
+        #echo ${__file} ${__bakfile} ${__linktgt}
+    fi
 done
+
+# go back to initial location
+cd ${CWD}

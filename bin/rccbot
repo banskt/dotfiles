@@ -1,0 +1,29 @@
+#!/bin/bash
+
+# https://verynomagic.com/2015/06/say-no-to-sshpass.html
+# http://silmor.de/notty.php
+# cat /home/saikat/.etajoruri/rcc_passphrase.txt
+
+__passcheck=1
+RCCPASSFILE=${HOME}/.etajoruri/rcc_passphrase.txt
+if [[ -r "${RCCPASSFILE}" ]]; then
+    __password=$( cat ${RCCPASSFILE} )
+    if [[ "${__password}" = *" "* ]]; then
+        echo "Error: Password contain spaces."
+    else
+        __passcheck=0
+    fi
+else
+    echo "Could not find password file."
+fi
+
+[[ ${__passcheck} == 0 ]] || exit
+
+EXPFILE=${HOME}/.dotfiles/expect/rcc.exp
+COMMAND="$@"
+
+if [[ -z ${COMMAND} ]]; then
+    ${EXPFILE} ${RCCPASSFILE} ssh rcc
+else
+    ${EXPFILE} ${RCCPASSFILE} ${COMMAND}
+fi

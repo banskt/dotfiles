@@ -82,13 +82,13 @@ _do_start() {
                 break
             fi
             echo "Waiting for Jupyter to start ..."
-            sleep 1
+            sleep 2
         done
         REMOTE_URI=
         while [ -z "${REMOTE_URI}" ]; do
             REMOTE_URI=$( cat ${LOGFILE} | grep "\/\?token=" | awk '{print $NF}' | head -n 1 )
             echo "Waiting for Jupyter to start ..."
-            sleep 1
+            sleep 2
         done
         hostname > ${HOSTFILE}
         echo "Started Jupyter at ${REMOTE_URI}"
@@ -102,15 +102,16 @@ _do_kill_procid() {
     # if host is not provided (??)
     # or host is current node
     if [[ -z "${__host}" ]] || [[ "${__host}" == $( hostname ) ]]; then
-        kill -9 ${__procid} && __success=0 & return 0
+        kill -9 ${__procid} && __success=0
     # if host is provided
     elif [[ ! -z "${__host}" ]]; then
-        ssh ${__host} 'kill -9 '"${__procid}"'' && __success=0 && return 0
+        ssh ${__host} 'kill -9 '"${__procid}"'' && __success=0
     elif [[ -f ${SERVERNODES} ]]; then
         readarray -t __nodes < ${SERVERNODES}
         __thisnode=$( hostname )
         for __node in "${__nodes[@]}"; do
             if [[ "${__node}" != "${__thisnode}" ]]; then
+                # don't loop over all nodes, return when successful.
                 ssh ${__node} 'kill -9 '"${__procid}"'' && __success=0 && return 0
             fi
         done
@@ -144,17 +145,14 @@ _do_stop() {
         [[ -f ${HOSTFILE} ]] && __host=$( cat ${HOSTFILE} )
         echo "Killing Jupyter Notebook."
         _do_kill_procid ${__procid} ${__host} && __success=0 || __success=1
-        [[ ${__success} == 0 ]] && rm ${PIDFILE} || echo "Could not kill Jupyter Notebook."
+        # exit with error if not successfully killed
+        [[ ${__success} == 0 ]] || exit 1
+        # remove temporary files if process is terminated successfully
+        [[ -f ${PIDFILE} ]]  && rm -f ${PIDFILE}  && echo "Removed process file."
+        [[ -f ${HOSTFILE} ]] && rm -f ${HOSTFILE} && echo "Removed host file."
+        [[ -f ${LOGFILE} ]]  && rm -f ${LOGFILE}  && echo "Removed log file."
     else
-        echo "No PID found for Jupyter Notebook."
-    fi
-    if [[ ${__success} == 0 ]]; then
-        if [[ -f ${LOGFILE} ]]; then
-            echo "Removing log file."
-            rm ${LOGFILE}
-        else
-            echo "No log file found for Jupyter Notebook."
-        fi
+        echo "No PID file found for Jupyter Notebook."
     fi
 }
 
@@ -191,7 +189,24 @@ _do_kill_all() {
 }
 
 _show_help() {
-    echo "Start Jupyter Notebook server on a computer."
+    exitcode=1
+    [[ ! -z ${1} ]] && [[ ${1} == 0 ]] && exitcode=0
+    [[ $exitcode == 1 ]] && echo "Wrong command options."
+    echo "jupyter-serve: Start / stop a Jupyter Notebook server as a background process."
+    echo "Usage:"
+    echo "    jupyter-server <options>"
+    echo "Options:"
+    echo "    --help    show help and exit."
+    echo "    --start   start server."
+    echo "    --stop    stop server."
+    echo "    --kill    kill all servers on this machine / node."
+    echo "    --show    show detailed process of all running servers"
+    echo "              in this machine or all nodes of this machine."
+    echo "    --check   check if any Jupyter server is running on this machine."
+    echo "    --get-uri         show URI of the running Jupyter server."
+    echo "    --get-uri-host    show URI and hostname of the Jupyter server."
+    echo ""
+    [[ $exitcode == 0 ]] && exit 0 || exit 1
 }
 
 
@@ -202,6 +217,10 @@ SILENT="false"
 case "${FLAG}" in
     "")     
         _show_help
+        ;;
+
+    "--help")
+        _show_help 0
         ;;
 
     "--start")

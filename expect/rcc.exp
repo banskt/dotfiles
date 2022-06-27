@@ -1,0 +1,174 @@
+#!/usr/bin/expect -f
+
+# ===============
+#
+# WARNING: SECURITY DANGER. USE AT YOUR OWN RISK.
+#
+# Usage:
+#   ./rcc.exp passfile.txt cmd [arg1] [arg2] [...]
+#
+# This script automically provides password and authentication option 
+# to any command which requires interactive login to RCC one or more times.
+# Both the password and authentication option are provided in a loop until
+# the command is complete (or fails).
+# 
+# SSH:
+# It also provides access to RCC shell via SSH, but note that `expect` records
+# every keystroke and output from the shell throughout the SSH session.
+#
+# Options:
+# passfile.txt      A file containing the password in text (string).
+# cmd               The command to be run, which requires interactive login
+#                   examples: ssh, scp
+# [argn]            Arguments of the command `cmd`. A command can have any 
+#                   number of arguments.
+#
+# Example 1:
+# I have a bash function `pyremote` which opens a Jupyter Notebook server
+# on a random port of a remote machine and launches a SSH tunnel to that port 
+# of the remote machine. When running this command for RCC, `pyremote rcc open`
+# requires 4 or more logins to RCC.
+# To avoid typing the password and authentication option for every login,
+# this script can be used as:
+#   ./rcc.exp passfile.txt pyremote rcc open
+# to automate the interaction.
+#
+# Example 2:
+# RCC shell can be accessed by
+#   ./rcc.exp passfile.txt ssh rcc
+#
+# ===============
+
+log_user 1
+
+# get password file and the command from input
+set passf [lindex $argv 0]
+set cmd   [lrange $argv 1 end]
+set cmd0  [lindex $cmd 0]
+
+# read password from password file
+set fp [open $passf r]
+# read includes file newline, hence using gets
+# to read individual lines
+#set passw [read $fp]
+#gets $fp username
+gets $fp passwf
+set passw [string trim $passwf]
+close $fp
+
+# declare non-fancy prompts for new bash shell
+set prompt_send   {PS1='expbot> '}
+set prompt_match  {\r\nexpbot> }
+
+# debug, check which commands are being passed
+#puts "Main command: $cmd0"
+#puts "Full command: $cmd"
+#puts "Password file: $passf"
+#puts "Password: <$passwf>"
+#puts "Password trimmed: <$passw>"
+#puts "Prompt: $prompt_match"
+
+# amount of time to wait for output (in seconds).
+# An infinite timeout is designated by the value -1.
+set timeout -1
+
+# The expect interacting function 
+# provide responses based on output of $cmd
+proc connect {passw} {
+    global prompt_match
+    expect {
+        # 
+        "Password: "                 { send -- "$passw\r"
+                                       exp_continue }
+        #
+        # the dual authentication response
+        "Passcode or option (1-3): " { send "1\r"
+                                       exp_continue }
+        #
+        # after successful login,
+        # transfer control to user
+        "Success. Logging you in..." { return 0 }
+        #
+        # we have arrived at another prompt, 
+        # let the process decide what to do next
+        -re $prompt_match            { return 10 }
+        #
+        #-re $match_prompt            { send -- "echo I will exit now.\r"
+        #                               return 3 }
+        # Tell expect stay in this 'expect' block and for each character that the process prints
+        # reset the timeout counter back to 0.
+        # -re .          { exp_continue }
+        #
+        # Return if we are waiting too long.
+        # If timeout is -1, this is redundant.
+        timeout        { return 1 }
+        #
+        # If the output does not match other conditions,
+        # we reach the eof for this expect.
+        eof            { return 2 }
+    }
+}
+
+if {$cmd0 == "ssh" } {
+    spawn {*}$cmd
+    set connres [connect $passw]
+    if { $connres == 0 } {
+        # succesful login
+        interact
+    } elseif { $connres == 2 } {
+        # eof
+        send_user \n
+        exit 0
+    }
+} else {
+    spawn $env(SHELL)
+    # replace fancy PS1 prompt with a simple PS1 prompt
+    # this is required for matching the prompt by
+    # expect statements later
+    expect     "*$ "
+    send --    "$prompt_send\r"
+    # send the command
+    expect -re  $prompt_match
+    send --    "$cmd\r"
+    # perform the connection operation in a loop
+    # as many times as required
+    set connres [connect $passw]
+    # process the output
+    if { $connres == 10 } {
+        # we received a new prompt
+        send -- "exit\r"
+        send_user \n
+        exit 0
+        # Exit expect if you do not want to display the commands
+        # on stdout for the user
+        # exit 0
+    } elseif { $connres == 1 } {
+        # timeout
+        exit 11
+    } elseif { $connres == 2 } {
+        # eof
+        exit 10
+    }
+    # if exit is not clean, handle control to user
+    interact
+}
+#
+#
+#
+#
+#
+#
+#
+# --------- old commands ---------
+#lassign [wait] pid spawnid os_error_flag value
+#if {$os_error_flag == 0} {
+#    puts "exit status: $value"
+#} else {
+#    puts "errno: $value"
+#}
+#set timeout 1
+#expect timeout {
+#    send_user \n
+#}
+#
+#

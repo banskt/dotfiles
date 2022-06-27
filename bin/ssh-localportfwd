@@ -42,9 +42,10 @@ _do_open() {
     local __socketfile=$( _tunnel_socket_file ${1} ${2} ${3} )
     echo $__socketfile
     if [[ ! -S ${__socketfile} ]]; then
-        [[ -z "${4}" ]] && __remote_host=${4} || __remote_host="127.0.0.1"
+        [[ ! -z "${4}" ]] && __remote_host=${4} || __remote_host="127.0.0.1"
         echo "Creating new SSH tunnel from local port ${3} to listen to ${__remote_host}:${2} of remote server ${1}."
         if [[ -z "${5}" ]]; then
+            echo "ssh -f -M -S ${__socketfile} -L ${3}:${__remote_host}:${2} -N ${1}"
             ssh -f -M -S ${__socketfile} -L ${3}:${__remote_host}:${2} -N ${1}
         else
             ssh -f -M -S ${__socketfile} -L ${3}:${__remote_host}:${2} ${1} ${5}

@@ -22,6 +22,9 @@ update-texlive-repository () {
 ## Most importantly, add /opt/texlive/2020/bin/x86_64-linux
 ## to your PATH for current and future sessions.
 ## Logfile: /opt/texlive/2020/install-tl.log
-export INFOPATH="/opt/texlive/2020/texmf-dist/doc/info:$INFOPATH"
-export MANPATH="/opt/texlive/2020/texmf-dist/doc/man:$MANPATH"
-export PATH="/opt/texlive/2020/bin/x86_64-linux:$PATH"
+##
+## The source directory can be specified in .custom/bashrc
+[[ -z "${TEXLIVESRC}" ]] && TEXLIVESRC="/opt/texlive/2020"
+export INFOPATH="${TEXLIVESRC}/texmf-dist/doc/info:$INFOPATH"
+export MANPATH="${TEXLIVESRC}/texmf-dist/doc/man:$MANPATH"
+export PATH="${TEXLIVESRC}/bin/x86_64-linux:$PATH"

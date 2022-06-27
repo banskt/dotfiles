@@ -3,7 +3,6 @@
 # for examples
 
 export DOTFILES=~/.dotfiles
-export DOTDEBUG=0
 
 _log_debug() { [[ ${DOTDEBUG} == 0 ]] && echo "${@}"; }
 
@@ -31,6 +30,13 @@ loadbashrc() {
     dotsrc ${DOTFILES}/bash/${1}.bashrc; 
 }
 
+# load custom environment variable before doing anything
+if [[ -f ${HOME}/.custom_dotfiles/bashrc ]]; then
+    dotsrc ${HOME}/.custom_dotfiles/bashrc
+fi
+
+[[ -z ${DOTDEBUG} ]] && DOTDEBUG=1
+
 # Common initialization
 loadbashrc common
 
@@ -46,17 +52,17 @@ case $- in
 esac
 loadbashrc interactive
 
-# >>> conda initialize >>>
-# !! Contents within this block are managed by 'conda init' !!
-__conda_setup="$('/opt/miniconda3/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"
-if [ $? -eq 0 ]; then
-    eval "$__conda_setup"
-else
-    if [ -f "/opt/miniconda3/etc/profile.d/conda.sh" ]; then
-        . "/opt/miniconda3/etc/profile.d/conda.sh"
-    else
-        export PATH="/opt/miniconda3/bin:$PATH"
-    fi
-fi
-unset __conda_setup
-# <<< conda initialize <<<
+## # >>> conda initialize >>>
+## # !! Contents within this block are managed by 'conda init' !!
+## __conda_setup="$('/opt/miniconda3/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"
+## if [ $? -eq 0 ]; then
+##     eval "$__conda_setup"
+## else
+##     if [ -f "/opt/miniconda3/etc/profile.d/conda.sh" ]; then
+##         . "/opt/miniconda3/etc/profile.d/conda.sh"
+##     else
+##         export PATH="/opt/miniconda3/bin:$PATH"
+##     fi
+## fi
+## unset __conda_setup
+## # <<< conda initialize <<<
