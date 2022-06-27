@@ -74,6 +74,11 @@ Note, however, neither `rshd` nor `sshd` generally invoke the shell with `--norc
 
 ## Quirks
 - `bash --norc` loads the environment variables already in the session.
+- `${VAR-foo}`  equals `foo` if `VAR` is unset. (remains empty if empty)
+- `${VAR:-foo}` equals `foo` if `VAR` is unset or empty.
+- `${VAR+foo}`  equals `foo` if `VAR` is set. 
+- `${VAR:+foo}` equals `foo` if `VAR` is set and non-empty.
+- [How to determine if a bash variable is empty?](https://serverfault.com/questions/7503)
 
 ## My home environment
 

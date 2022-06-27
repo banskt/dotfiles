@@ -1,0 +1,238 @@
+#!/bin/bash
+
+TMPDIR="${HOME}/.tmp/jupyter-server"
+PIDFILE="${TMPDIR}/save_pid.txt"
+HOSTFILE="${TMPDIR}/save_host.txt"
+LOGFILE="${TMPDIR}/notebook_log.txt"
+#PORT=8988
+PORT=$( shuf -i8900-9000 -n1 )
+JPTCMD="jupyter-notebook --no-browser --port ${PORT}"
+
+SERVERNODES="${HOME}/.login_nodes"
+
+[[ ! -d ${TMPDIR} ]] && mkdir -p ${TMPDIR}
+
+_is_running() {
+    # if logfile exists then the process is surely running
+    [[ -f ${LOGFILE} ]] && return 0
+    # if not then lets look at ps 
+    # prevent 'grep' showing up in ps result
+    # https://unix.stackexchange.com/questions/74185/
+    __proc=$( ps ux | grep "[j]upyter-notebook --no-browser" )
+    [[ ! -z "${proc}" ]] && return 0
+    #
+    # on servers, there could be multiple login nodes
+    if [[ -f ${SERVERNODES} ]]; then
+        readarray -t __nodes < ${SERVERNODES}
+        __thisnode=$( hostname )
+        for node in "${__nodes[@]}"; do
+            if [[ "$node" != "${__thisnode}" ]]; then
+                __proc=$( ssh $node 'ps ux | grep "[j]upyter-notebook --no-browser"' )
+                [[ ! -z "${proc}" ]] && return 0
+            fi
+        done
+    fi
+    [[ ! -z "${proc}" ]] ||  [[ -f ${LOGFILE} ]] && return 0 || return 1
+}
+
+
+_show_running_process() {
+    # show the information for processes. ps flags used in this function:
+    # -f   full-format listing.
+    # -F   extra full-format
+    # -l   long format (extra fields)
+    # -ww  Wide output.  Use this option twice for unlimited width.
+    if _is_running; then
+        echo "Jupyter server is running. Searching for process..."
+        __procid=$( ps ux | grep "[j]upyter-notebook --no-browser" | awk '{print $2}' )
+        if [[ ! -z ${__procid} ]]; then
+            ps -fww -p ${__procid}
+        else
+            echo "Could not find process in this node."
+            # check other nodes?
+            if [[ -f ${SERVERNODES} ]]; then
+                readarray -t __nodes < ${SERVERNODES}
+                __thisnode=$( hostname )
+                for __node in "${__nodes[@]}"; do
+                    if [[ "${__node}" != "${__thisnode}" ]]; then
+                        echo "Checking ${__node} ..."
+                        ssh ${__node} '__procid=$( ps ux | grep "[j]upyter-notebook --no-browser" | awk '"'"'{print $2}'"'"' ); [[ ! -z ${__procid} ]] && ps -fww -p ${__procid}'
+                    fi
+                done
+            fi
+        fi
+    else
+        echo "No Jupyter server is running."
+    fi
+}
+
+_do_start() {
+    # check if Jupyter is already running
+    if _is_running; then
+        echo "Jupyter notebook is already running."
+        _show_running_process
+    else
+        source ~/.bashrc
+        load-env
+        ${JPTCMD} > ${LOGFILE} 2>&1 &
+        echo $! > ${PIDFILE}
+        while :
+        do
+            if [[ -f "${LOGFILE}" ]]; then
+                break
+            fi
+            echo "Waiting for Jupyter to start ..."
+            sleep 1
+        done
+        REMOTE_URI=
+        while [ -z "${REMOTE_URI}" ]; do
+            REMOTE_URI=$( cat ${LOGFILE} | grep "\/\?token=" | awk '{print $NF}' | head -n 1 )
+            echo "Waiting for Jupyter to start ..."
+            sleep 1
+        done
+        hostname > ${HOSTFILE}
+        echo "Started Jupyter at ${REMOTE_URI}"
+    fi  
+}
+
+_do_kill_procid() {
+    __procid=${1}
+    __host=${2}
+    __success=1
+    # if host is not provided (??)
+    # or host is current node
+    if [[ -z "${__host}" ]] || [[ "${__host}" == $( hostname ) ]]; then
+        kill -9 ${__procid} && __success=0 & return 0
+    # if host is provided
+    elif [[ ! -z "${__host}" ]]; then
+        ssh ${__host} 'kill -9 '"${__procid}"'' && __success=0 && return 0
+    elif [[ -f ${SERVERNODES} ]]; then
+        readarray -t __nodes < ${SERVERNODES}
+        __thisnode=$( hostname )
+        for __node in "${__nodes[@]}"; do
+            if [[ "${__node}" != "${__thisnode}" ]]; then
+                ssh ${__node} 'kill -9 '"${__procid}"'' && __success=0 && return 0
+            fi
+        done
+    fi
+    [[ ${__success} == 0 ]] && return 0 || return 1
+}
+
+
+## _do_kill_all() {
+##     if _is_running; then
+##         __procid=$( ps ux | grep "[j]upyter-notebook --no-browser" | awk '{print $2}' )
+##         [[ ! -z ${__procid} ]] && kill -9 ${__procid}
+##         if [[ -f ${SERVERNODES} ]]; then
+##             readarray -t __nodes < ${SERVERNODES}
+##             __thisnode=$( hostname )
+##             for __node in "${__nodes[@]}"; do
+##                 if [[ "${__node}" != "${__thisnode}" ]]; then
+##                     ssh ${__node} '__procid=$( ps ux | grep "[j]upyter-notebook --no-browser" | awk '"'"'{print $2}'"'"' ); [[ ! -z ${__procid} ]] & kill -9 ${__procid}'
+##                 fi
+##             done
+##         fi
+##     fi
+## }
+
+
+_do_stop() {
+    __success=1
+    if [[ -f ${PIDFILE} ]]; then
+        __procid=$( cat ${PIDFILE} )
+        __host=
+        [[ -f ${HOSTFILE} ]] && __host=$( cat ${HOSTFILE} )
+        echo "Killing Jupyter Notebook."
+        _do_kill_procid ${__procid} ${__host} && __success=0 || __success=1
+        [[ ${__success} == 0 ]] && rm ${PIDFILE} || echo "Could not kill Jupyter Notebook."
+    else
+        echo "No PID found for Jupyter Notebook."
+    fi
+    if [[ ${__success} == 0 ]]; then
+        if [[ -f ${LOGFILE} ]]; then
+            echo "Removing log file."
+            rm ${LOGFILE}
+        else
+            echo "No log file found for Jupyter Notebook."
+        fi
+    fi
+}
+
+
+_get_uri() {
+    [[ -f ${LOGFILE} ]] && __remote_uri=$( cat ${LOGFILE} | grep "\/\?token=" | awk '{print $NF}' | head -n 1 ) || __remote_uri=
+    echo ${__remote_uri}
+}
+
+_get_uri_host() {
+    [[ -f ${HOSTFILE} ]] && __host=$( cat ${HOSTFILE}) || __host=$( hostname )
+    echo "$( _get_uri )  ${__host}"
+}
+
+
+_do_kill_all() {
+    __procid=$( ps ux | grep "[j]upyter-notebook --no-browser" | awk '{print $2}' )
+    if [[ -z ${__procid} ]]; then
+        echo "No jupyter is running. Nothing to kill."
+    fi
+    for __pid in ${__procid}; do
+        if [[ ${SILENT} != "true" ]]; then
+            echo "Kill process ${__pid}?"
+            read __confirm
+            if [[ ${__confirm} =~ ^[yY]$ || ${__confirm} =~ ^[yY][eE][sS]$ ]]; then
+                echo "Killing process ${__pid}"
+                kill -9 ${__pid}
+            fi
+        else
+            echo "Killing process ${__pid}"
+            kill -9 ${__pid}
+        fi
+    done
+}
+
+_show_help() {
+    echo "Start Jupyter Notebook server on a computer."
+}
+
+
+FLAG="${1}"
+SILENT="false"
+[[ ! -z ${2} ]] && [[ "${2}" == "silent" ]] && SILENT="true"
+
+case "${FLAG}" in
+    "")     
+        _show_help
+        ;;
+
+    "--start")
+        _do_start
+        ;;
+
+    "--stop")
+        _do_stop
+        ;;
+
+    "--kill")
+        _do_kill_all
+        ;;
+
+    "--show")
+        _show_running_process
+        ;;
+
+    "--get-uri")
+        _get_uri
+        ;;
+
+    "--get-uri-host")
+        _get_uri_host
+        ;;
+
+    "--check")
+        _is_running && echo "Running" || echo "Not running"
+        ;;
+
+    *)  
+        _show_help
+        ;;
+esac

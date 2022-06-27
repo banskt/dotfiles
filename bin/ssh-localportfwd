@@ -1,0 +1,106 @@
+#!/bin/bash
+
+# Local port forwarding allows you to forward a port on the local (ssh client) machine 
+# to a port on the remote (ssh server) machine, which is then forwarded to a port on 
+# the destination machine. The SSH client listens on a given port and tunnels any 
+# connection to that port to the specified port on the remote SSH server, which then 
+# connects to a port on the destination machine. The destination machine can be the 
+# remote SSH server or any other machine.
+#
+# ssh -L [LOCAL_IP:]LOCAL_PORT:DESTINATION:DESTINATION_PORT [USER@]SSH_SERVER
+#
+# The options used are as follows:
+#    LOCAL_IP    -- The local machine IP address. Defaults to localhost.
+#    LOCAL_PORT  -- The local machine port number.
+#    DESTINATION -- The IP or hostname of the destination machine.
+#    DESTINATION_PORT - The port of the destination machine.
+#    [USER@]SERVER_IP - The remote SSH user and server IP address.
+#
+# For tunneling to a destination, the IP of the destination is 127.0.0.1, that is the 
+# machine on which the SSH server is running.
+# 
+# Other ssh options used:
+#    -f  run ssh in the background
+#    -N  not to execute remote command
+#    -M  places ssh client into “master” mode for connection sharing
+#    -S  use the specified socket file
+#
+
+_tunnel_socket_file() {
+    echo "/tmp/ssh_tunnel_${1}_${2}_${3}"
+    #local __socketfile="/tmp/ssh_tunnel"
+    #if [[ -n "${1}" ]]; then
+    #    [[ -z "${2}" ]] && echo "/tmp/ssh_tunnel_${1}" || echo "/tmp/ssh_tunnel_${1}_${2}"
+    #else
+    #    return 1
+    #fi
+}
+
+# usage:
+#    _do_open <user@server> <remote port> <local port> <(optional) remote command>
+_do_open() {
+    local __socketfile=$( _tunnel_socket_file ${1} ${2} ${3} )
+    echo $__socketfile
+    if [[ ! -S ${__socketfile} ]]; then
+        [[ -z "${4}" ]] && __remote_host=${4} || __remote_host="127.0.0.1"
+        echo "Creating new SSH tunnel from local port ${3} to listen to ${__remote_host}:${2} of remote server ${1}."
+        if [[ -z "${5}" ]]; then
+            ssh -f -M -S ${__socketfile} -L ${3}:${__remote_host}:${2} -N ${1}
+        else
+            ssh -f -M -S ${__socketfile} -L ${3}:${__remote_host}:${2} ${1} ${5}
+        fi
+    else
+        echo "SSH tunnel to ${1} via port ${3} already exists."
+    fi
+}
+
+
+# usage:
+#  _do_close <user@server> <remote port> <local port>
+_do_close() {
+    echo "Closing local port forwarding to ${1}:${2} via port ${3}."
+    local __socketfile=$( _tunnel_socket_file ${1} ${2} ${3} )
+    ssh -S ${__socketfile} -O exit ${1}
+}
+
+_show_help() {
+    CMD="$( basename ${BASH_SOURCE[0]} )"
+    echo "Open or close local port forwarding."
+    echo "Usage:   "
+    echo "   $CMD open  <user@server> <remote port> <local port> <(optional) remote command>"
+    echo "   $CMD close <user@server> <remote port> <local port>"
+    exit
+}
+
+CMD=${1}
+SERVER=${2} # contains user@server / config definition
+REMOTEPORT=${3}
+LOCALPORT=${4}
+REMOTEHOST=${5}
+REMOTECMD=${6}
+
+#[[ -z "${SERVER}" ]] || echo "Server: ${SERVER}"
+#[[ -z "${REMOTEPORT}" ]] || echo "Remote Port: ${REMOTEPORT}"
+#[[ -z "${LOCALPORT}" ]] || echo "Local Port: ${LOCALPORT}"
+#[[ -z "${REMOTECMD}" ]] || echo "Remote Cmd: ${REMOTECMD}"
+
+[[ "${CMD}" == "open" ]] || [[ "${CMD}" == "close" ]] || _show_help
+[[ -n "${SERVER}" ]] && [[ -n "${REMOTEPORT}" ]] && [[ -n "${LOCALPORT}" ]] || _show_help
+
+case "${CMD}" in
+    "")        
+        _show_help
+        ;;
+
+    "open")
+        _do_open ${SERVER} ${REMOTEPORT} ${LOCALPORT} ${REMOTEHOST} ${REMOTECMD}
+        ;;
+
+    "close")
+        _do_close ${SERVER} ${REMOTEPORT} ${LOCALPORT}
+        ;;
+
+    *)
+        _show_help
+        ;;
+esac

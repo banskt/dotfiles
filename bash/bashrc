@@ -3,42 +3,40 @@
 # for examples
 
 export DOTFILES=~/.dotfiles
+export DOTDEBUG=0
 
-# source specific .bashrc files
-function dotbashrc() {
-    local file
-    if [[ "${1}" ]]; then
-        file="${DOTFILES}/bash/${1}.bashrc"
-        if [ -f ${file} ]; then
-            source "${file}"
-        fi
-    fi
-}
+_log_debug() { [[ ${DOTDEBUG} == 0 ]] && echo "${@}"; }
 
-# Source all files in "bash"
-function dotsrc() {
+# source one file or all files in one directory, recursively
+# use like so:
+#   dotsrc <filename>
+#   dotsrc <directory>
+dotsrc() {
     local file
-    if [[ "${1}" ]]; then
-        file="${DOTFILES}/bash/${1}.sh"
-        if [ -f ${file} ]; then
-            source "${file}"
-        fi
-    else
-        for file in ${DOTFILES}/bash/*.sh; do
-            source "$file"
+    if [ -d ${1} ]; then
+        _log_debug "Loading ${1} directory"
+        for file in ${1}/*; do
+            _log_debug "File found: ${file}"
+            dotsrc ${file}
         done
     fi
+    if [ -f ${1} ]; then
+        _log_debug "Loading file ${1}"
+        source ${1}
+    fi
 }
 
-# Always load all functions
-dotsrc 
+loadbashrc() { 
+    _log_debug "Bash: Loading ${1} utilities from ${DOTFILES}/bash/${1}.bashrc"
+    dotsrc ${DOTFILES}/bash/${1}.bashrc; 
+}
 
 # Common initialization
-dotbashrc common
+loadbashrc common
 
 # Load login specific utilities
 if shopt -q login_shell; then
-    dotbashrc login
+    loadbashrc login
 fi
 
 # If not running interactively, do not load interactive functions
@@ -46,7 +44,7 @@ case $- in
     *i*) ;;
       *) return ;;
 esac
-dotbashrc interactive
+loadbashrc interactive
 
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!

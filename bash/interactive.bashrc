@@ -1,6 +1,10 @@
 #!/bin/bash
 
-set-bash-prompt
+# Import all interactive plugins
+dotsrc ${DOTFILES}/bash/interactive
+
+# Set prompt
+my-bash-prompt
 set-terminal-title '$(hostname):  $(pwd-short)'
 
 # enable color support
@@ -13,6 +17,10 @@ if [ -x /usr/bin/dircolors ]; then
     alias fgrep='fgrep --color=auto'
     alias egrep='egrep --color=auto'
 fi
+
+alias ll='ls -lhF --group-directories-first'
+alias lla='ls -AlhF --group-directories-first'
+alias lsc='ls -ACF --group-directories-first'
 
 # create a desktop notification alert.  Use like so:
 #     sleep 1; alert
