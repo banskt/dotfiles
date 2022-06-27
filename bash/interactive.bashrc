@@ -36,3 +36,8 @@ if ! shopt -oq posix; then
     . /etc/bash_completion
   fi
 fi
+
+# module specific loadings
+for dir in python git; do
+    dotsrc ${DOTFILES}/${dir}
+done

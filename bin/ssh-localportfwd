@@ -65,9 +65,9 @@ _do_close() {
 
 _show_help() {
     CMD="$( basename ${BASH_SOURCE[0]} )"
-    echo "Open or close local port forwarding."
+    echo "Open or close local port forwarding, using socket file."
     echo "Usage:   "
-    echo "   $CMD open  <user@server> <remote port> <local port> <(optional) remote command>"
+    echo "   $CMD open  <user@server> <remote port> <local port> <(optional) remote host> <(optional) remote command>"
     echo "   $CMD close <user@server> <remote port> <local port>"
     exit
 }

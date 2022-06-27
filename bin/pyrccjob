@@ -1,0 +1,38 @@
+#!/bin/bash
+
+function rccjpt() {
+    __command=${1}
+    __port1=8519 ##$( shuf -i8000-9000 -n1 )
+    socket_file="/tmp/ssh_session_rcc"
+    if [ ${__command} == "open" ]; then
+        JPTINFO=$( ssh rcc 'software/bin/jptinfo' )
+        JPTSTATE=$( echo ${JPTINFO} | grep "State" | awk '{print $2}' )
+        echo ${JPTSTATE}
+        if [ ${JPTSTATE} == "RUNNING" ]; then
+            JPTNODE=$(  echo ${JPTINFO} | grep "Node"  | awk '{print $4}' )
+            JPTPORT=$(  echo ${JPTINFO} | grep "Port"  | awk '{print $6}' )
+            JPTTOKEN=$( echo ${JPTINFO} | grep "Token" | awk '{print $8}' )
+            echo ${JPTNODE}
+            echo ${JPTPORT}
+            echo ${JPTTOKEN}
+            if [[ ! -S ${socket_file} ]]; then
+                echo "Starting new SSH tunnel at port ${__port1}"
+                # localport:destination:destination_port
+                ssh -f -M -S ${socket_file} -L ${__port1}:127.0.0.1:${__port1} rcc ssh -L ${__port1}:127.0.0.1:${JPTPORT} -N ${JPTNODE}
+            else
+                echo "Using existing SSH tunnel"
+            fi
+            echo "All good! Open this link in your browser:"
+            echo "http://127.0.0.1:${__port1}/?token=${JPTTOKEN}"
+        else
+            echo "You have to first start a Jupyter Notebook in RCC"
+        fi
+    elif [ ${__command} == "close" ]; then
+        ssh -S ${socket_file} -O exit rcc
+        ssh rcc "/usr/sbin/lsof -ti:${__port1} | xargs kill -9"
+    else
+        echo "Wrong command"
+    fi
+}
+
+echo "Not implemented yet"

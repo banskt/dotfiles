@@ -1,0 +1,332 @@
+#!/bin/bash
+
+## ## History Control
+## ## Adapeted from https://unix.stackexchange.com/questions/18212
+## ## Store history in a separate directory ~/.bash_history
+## ## with history of each month in separate files.
+## test -d ~/.bash_history/ || mkdir ~/.bash_history/
+## HISTFILE=~/.bash_history/$(date +%Y-%m)
+## ## unlimited history and unlimited historyfilesize
+## HISTSIZE=-1
+## HISTFILESIZE=-1
+## ## don't put duplicate lines
+## HISTCONTROL=ignoredups
+## ## append to the history file, don't overwrite it
+## shopt -s histappend
+## PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND"
+## ## search for a command using
+## ##    $ myhist whatever-command-you-are-searching
+## myhist() {
+##     grep -a $@ ~/.bash_history/*
+## }
+
+## ##
+## ## Set a fancy prompt (non-color, unless we know we "want" color)
+## ##
+## case "$TERM" in
+##     xterm-color|*-256color) color_prompt=yes;;
+## esac
+## 
+## ## see https://misc.flogisoft.com/bash/tip_colors_and_formatting
+## ## for 256 colors, the color format is
+## ##   \e[${attr};38;5;${cnum}m (foreground)
+## ##   \e[${attr};48;5;${cnum}m (background)
+## ## where ${attr} is the code for font attribute
+## ## 0 = normal, 1 = bold, 2 = dim, 3 = italics, 4 = underlined,
+## ## 5 = blink, 7 = reverse, 8 = hidden (think passwords)
+## ## and ${cnum} is the color number.
+## ## I have defined a function below to see all the color numbers:
+## ##   $ show-bash-colors
+## ## Here is an example:
+## ##   $ echo -e "\e[1;38;5;229mHello \e[1;48;5;229;38;5;232mWorld\e[0m"
+## ## Note the second format is \e[${attr};${background};${foreground}m"
+## ##
+## ## Non-printable sequences should be enclosed in \[ and \]
+## ## see https://unix.stackexchange.com/questions/105958/terminal-prompt-not-wrapping-correctly
+## FRED="\[\e[0;38;5;9m\]"
+## FBLE="\[\e[0;38;5;69m\]"
+## FYEL="\[\e[0;38;5;3m\]"
+## FGRN="\[\e[0;38;5;70m\]"
+## RS="\[\e[0m\]"
+## if [ "$color_prompt" = yes ]; then
+##     PS1="$FRED${debian_chroot:+($debian_chroot)}$FBLE\t $FYEL[\u@\h] $FGRN\W $FBLE\$ $RS"
+## else
+##     PS1='${debian_chroot:+($debian_chroot)}\t [\u@\h] \W \$ '
+## fi
+## 
+## unset color_prompt force_color_prompt
+## 
+## ##
+## ## Set the title string at the top of terminal window tab
+## ## https://unix.stackexchange.com/questions/177572/how-to-rename-terminal-tab-title-in-gnome-terminal/566383#566383
+## ##
+## set-title() {
+##     # If the length of string stored in variable `PS1_BAK` is zero...
+##     # - See `man test` to know that `-z` means "the length of STRING is zero"
+##     if [[ -z "$PS1_BAK" ]]; then
+##         # Back up your current Bash Prompt String 1 (`PS1`) into a global backup variable `PS1_BAK`
+##         PS1_BAK=$PS1
+##     fi
+## 
+##     # Set the title escape sequence string with this format: `\[\e]2;new title\a\]`
+##     # - See: https://wiki.archlinux.org/index.php/Bash/Prompt_customization#Customizing_the_terminal_window_title
+##     TITLE="\[\e]2;$@\a\]"
+##     # Now append the escaped title string to the end of your original `PS1` string (`PS1_BAK`), and set your
+##     # new `PS1` string to this new value
+##     PS1=${PS1_BAK}${TITLE}
+## }
+## 
+## set-title '$(whoami): $PWD'
+## 
+## ##
+## ## Copied several utilities from Ubuntu bashrc
+## ##
+## # make less more friendly for non-text input files, see lesspipe(1)
+## [ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
+## # enable color support of ls and also add handy aliases
+## if [ -x /usr/bin/dircolors ]; then
+##     test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
+##     alias ls='ls --color=auto'
+##     #alias dir='dir --color=auto'
+##     #alias vdir='vdir --color=auto'
+## 
+##     alias grep='grep --color=auto'
+##     alias fgrep='fgrep --color=auto'
+##     alias egrep='egrep --color=auto'
+## fi
+## # Add an "alert" alias for long running commands.  Use like so:
+## #   sleep 10; alert
+## alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo error)" "$(history|tail -n1|sed -e '\''s/^\s*[0-9]\+\s*//;s/[;&|]\s*alert$//'\'')"'
+## 
+## 
+## ##
+## ## Now comes the functions I defined
+## ## 
+## function show-bash-colors()
+## {
+##     for fgbg in 38 48 ; do # Foreground / Background
+##         for color in {0..255} ; do # Colors
+##             # Display the color
+##             printf "\e[${fgbg};5;%sm  %3s  \e[0m" $color $color
+##             # Display 6 colors per lines
+##             if [ $((($color + 1) % 20)) ==  0 ] ; then
+##                 echo # New line
+##             fi
+##         done
+##         echo # New line
+##     done
+## }
+
+#function page-extract()
+#{   # extract pages from PDF, uses 3 arguments:
+#    # $1 is the input file, $2 is the first page of the range to extract, $3 is the last page of the range to extract
+#    # output file will be named "inputfile_pXX-pYY.pdf"
+#    gs -sDEVICE=pdfwrite -dNOPAUSE -dBATCH -dSAFER -dFirstPage=${2} -dLastPage=${3} -sOutputFile=${1%.pdf}_p${2}-p${3}.pdf ${1}
+#}
+
+#function page-merge()
+#{   # merge several PDF files to a single one, uses multiple arguments
+#    # first argument is the name of the output file, remaining argument is the name of the PDFs to merge.
+#    gs -sDEVICE=pdfwrite -dNOPAUSE -dBATCH -dSAFER -sOutputFile=${1} "$@"
+#}
+
+#function pyremote()
+#{
+#    __server=${1}
+#    __command=${2}
+#    socket_file="/tmp/ssh_session_${__server}"
+#    if [ ${__command} == "open" ]; then
+#        if ssh -q ${__server} [[ ! -f jupyter_log.txt ]]; then
+#            ssh ${__server} './jupyter-no-browser.sh start'
+#        fi
+#        while [ -z "${remote_uri}" ]; do
+#            remote_uri=`ssh ${__server} 'cat jupyter_log.txt' | grep "\/\?token=" | awk '{print $NF}' | head -n 1`
+#        done
+#        echo "The Jupyter Notebook is running at: ${remote_uri}"
+#        remote_host=`echo $remote_uri | sed -e "s/[^/]*\/\/\([^:]*\):\([^\?]*\)\/?token=\(.*\)/\1/"`
+#        remote_port=`echo $remote_uri | sed -e "s/[^/]*\/\/\([^:]*\):\([^\?]*\)\/?token=\(.*\)/\2/"`
+#        remote_tokn=`echo $remote_uri | sed -e "s/[^/]*\/\/\([^:]*\):\([^\?]*\)\/?token=\(.*\)/\3/"`
+#        echo "Host: ${remote_host}"
+#        echo "Port: ${remote_port}"
+#        echo "Token: ${remote_tokn}"
+#        if [[ ! -S ${socket_file} ]]; then
+#            echo "Starting new SSH tunnel"
+#            ssh -f -N -M -S ${socket_file} -L ${remote_port}:127.0.0.1:${remote_port} ${__server}
+#        else
+#            echo "Using existing SSH tunnel"
+#        fi
+#    elif [ ${__command} == "close" ]; then
+#        ssh -S ${socket_file} -O exit ${__server}
+#        ssh ${__server} './jupyter-no-browser.sh stop'
+#    else
+#        echo "Wrong command"
+#    fi
+#}
+
+#function remotecmd() {
+#    __server=${1}
+#    __cmd=${2}
+#    __args="${@: 3}"
+#    echo ${__cmd} ${__args}
+#}
+
+# function rccjpt() {
+#     __command=${1}
+#     __port1=8519 ##$( shuf -i8000-9000 -n1 )
+#     socket_file="/tmp/ssh_session_rcc"
+#     if [ ${__command} == "open" ]; then
+#         JPTINFO=$( ssh rcc 'software/bin/jptinfo' )
+#         JPTSTATE=$( echo ${JPTINFO} | grep "State" | awk '{print $2}' )
+#         echo ${JPTSTATE}
+#         if [ ${JPTSTATE} == "RUNNING" ]; then
+#             JPTNODE=$(  echo ${JPTINFO} | grep "Node"  | awk '{print $4}' )
+#             JPTPORT=$(  echo ${JPTINFO} | grep "Port"  | awk '{print $6}' )
+#             JPTTOKEN=$( echo ${JPTINFO} | grep "Token" | awk '{print $8}' )
+#             echo ${JPTNODE}
+#             echo ${JPTPORT}
+#             echo ${JPTTOKEN}
+#             if [[ ! -S ${socket_file} ]]; then
+#                 echo "Starting new SSH tunnel at port ${__port1}"
+#                 # localport:destination:destination_port
+#                 ssh -f -M -S ${socket_file} -L ${__port1}:127.0.0.1:${__port1} rcc ssh -L ${__port1}:127.0.0.1:${JPTPORT} -N ${JPTNODE}
+#             else
+#                 echo "Using existing SSH tunnel"
+#             fi
+#             echo "All good! Open this link in your browser:"
+#             echo "http://127.0.0.1:${__port1}/?token=${JPTTOKEN}"
+#         else
+#             echo "You have to first start a Jupyter Notebook in RCC"
+#         fi
+#     elif [ ${__command} == "close" ]; then
+#         ssh -S ${socket_file} -O exit rcc
+#         ssh rcc "/usr/sbin/lsof -ti:${__port1} | xargs kill -9"
+#     else
+#         echo "Wrong command"
+#     fi
+# }
+
+function vultr-tunnel()
+{
+    __command=${1}
+    __port=${2}
+    socket_file="/tmp/ssh_session_vultr_${__port}"
+    if [ ${__command} == "open" ]; then
+        if [[ ! -S ${socket_file} ]]; then
+            echo "Starting new SSH tunnel"
+            ssh -f -N -M -S ${socket_file} -L ${__port}:127.0.0.1:80 vultr
+        else
+            echo "Using existing SSH tunnel"
+        fi
+    elif [ ${__command} == "close" ]; then
+        ssh -S ${socket_file} -O exit vultr
+    else
+        echo "Wrong command"
+    fi
+}
+
+## function git-add() {
+##     if [ -d .git ] || [ -f .git ]; then
+##         files=$(git ls-files --modified -o --exclude-standard)
+##         if [[ ${files} ]]; then
+##             git ls-files --modified -o --exclude-standard | xargs git add --all
+##             git status
+##         else
+##             echo "No modified files were found"
+##         fi
+##     else
+##         echo "This is not a git repository"
+##     fi
+## }
+
+## function up() {
+##     local d=""
+##     limit=$1
+##     for ((i=1 ; i <= limit ; i++)); do
+##         d=$d/..
+##     done
+##     d=$(echo $d | sed 's/^\///')
+##     if [ -z "$d" ]; then
+##         d=..
+##     fi
+##     cd $d
+## }
+
+function lemp() {
+    __command=${1}
+    if [ ${__command} == "start" ]; then
+        echo "Starting NGINX and MySQL."
+        sudo systemctl start php7-fpm
+        sudo systemctl start nginx
+        sudo systemctl start mysql
+    elif [ ${__command} == "stop" ]; then
+        echo "Stopping NGINX and MySQL."
+        sudo systemctl stop php7-fpm
+        sudo systemctl stop nginx
+        sudo systemctl stop mysql
+    fi
+    sudo systemctl status php7-fpm
+    sudo systemctl status nginx
+    sudo systemctl status mysql
+}
+
+##
+## Alias
+##
+
+
+#alias update-texlive-repository='sudo wget --mirror --no-parent -nH --cut-dirs=5 -o /opt/texlive-repository/update_log.txt -P /opt/texlive-repository/ ftp://ftp.gwdg.de/pub/ctan/systems/texlive/tlnet/'
+#alias update-texlive-repository='sudo wget --mirror --no-parent -nH --cut-dirs=4 -o /opt/texlive-repository/update_log.txt -P /opt/texlive-repository/ ftp://mirrors.rit.edu/CTAN/systems/texlive/tlnet/'
+
+#export GOPATH="/home/saikat/Documents/work/go-projects"
+
+#alias ll='ls -lhF'
+#alias la='ls -AlhF'
+#alias l='ls -CF'
+
+# Launch MyCrypto Wallet
+alias mycrypto="/home/saikat/Downloads/apps/crypto/mycrypto/linux-x86-64_1.7.13_MyCrypto.AppImage"
+# Load enviroments
+alias load-Rmkl='module load gcc/10.2.0 intel/mkl/2020/4.304 R/mkl/4.0.3 RStudio/1.4.1106'
+alias unload-Rmkl='module unload RStudio/1.4.1106 R/mkl/4.0.3'
+alias load-Ropenblas='module load gcc/10.2.0 openblas/gcc/0.3.10 R/openblas/4.0.3 RStudio/1.4.1106'
+alias unload-Ropenblas='module unload RStudio/1.4.1106 R/mkl/4.0.3'
+alias load-env='export LD_LIBRARY_PATH="/opt/R/mkl/4.0.3/lib/R/lib:${LD_LIBRARY_PATH}"; load-Rmkl; conda activate py39mkl'
+## # Clean Python __pycache__ and .pyc files
+## function pyclean() {
+##     find . -regex '^.*\(__pycache__\|\.py[co]\)$' -delete
+## }
+## 
+## function pydevclean() {
+##     __package=${1}
+##     if [[ ! -z ${__package} ]]; then
+##         __cwd=$( pwd )
+##         __dirname=$( basename ${__cwd} )
+##         #if [ ${__package} == ${__dirname} ]; then
+##         if [[ -d ./src/${__package} ]]; then
+##             pip uninstall -y ${__package}
+##             echo "Removing local build, egg-info and dynamic libraries."
+##             find . -name "*lib${__package}*.so" -delete
+##             find . -path "./src/${__package}.egg-info*" -delete
+##             find . -path "./build*" -delete
+##         else
+##             echo "This commands need to be run from parent directory."
+##         fi
+##     else
+##         echo "Please specify package name"
+##     fi
+## }
+
+
+## ## TexLive
+## ## Add /opt/texlive/2020/texmf-dist/doc/man to MANPATH.
+## ## Add /opt/texlive/2020/texmf-dist/doc/info to INFOPATH.
+## ## Most importantly, add /opt/texlive/2020/bin/x86_64-linux
+## ## to your PATH for current and future sessions.
+## ## Logfile: /opt/texlive/2020/install-tl.log
+## export INFOPATH="/opt/texlive/2020/texmf-dist/doc/info:$INFOPATH"
+## export MANPATH="/opt/texlive/2020/texmf-dist/doc/man:$MANPATH"
+## export PATH="/opt/texlive/2020/bin/x86_64-linux:$PATH"
+
+# Install Ruby Gems to ~/gems
+#export GEM_HOME="$HOME/gems"
+#export PATH="$HOME/gems/bin:$PATH"

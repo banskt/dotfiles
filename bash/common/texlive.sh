@@ -4,9 +4,24 @@
 ## alias update-texlive-repository='sudo wget --mirror --no-parent -nH --cut-dirs=4 -o /opt/texlive-repository/update_log.txt -P /opt/texlive-repository/ ftp://mirrors.rit.edu/CTAN/systems/texlive/tlnet/'
 
 update-texlive-repository () {
-    if [[ -d "${1}" ]]; then
+    if [[ ! -z "${1}" ]] && [[ -d "${1}" ]] && [[ "${1:0-1}" != "/" ]]; then
         sudo wget --mirror --no-parent -nH --cut-dirs=4 -o ${1}/update_log.txt -P ${1}/ ftp://mirrors.rit.edu/CTAN/systems/texlive/tlnet/
     else
-        echo "Wrong command. Use like: update-texlive-repository <path/to/repository>. Do not include trailing slash."
+        echo "Wrong command."
+        echo "Usage:"
+        echo "    update-texlive-repository <path/to/repository>."
+        echo "    Do not include trailing slash for the directory."
+        echo "    For example, update-texlive-repository /opt/texlive  is correct."
+        echo "                 update-texlive-repository /opt/texlive/ is wrong."
     fi
 }
+
+## TexLive
+## Add /opt/texlive/2020/texmf-dist/doc/man to MANPATH.
+## Add /opt/texlive/2020/texmf-dist/doc/info to INFOPATH.
+## Most importantly, add /opt/texlive/2020/bin/x86_64-linux
+## to your PATH for current and future sessions.
+## Logfile: /opt/texlive/2020/install-tl.log
+export INFOPATH="/opt/texlive/2020/texmf-dist/doc/info:$INFOPATH"
+export MANPATH="/opt/texlive/2020/texmf-dist/doc/man:$MANPATH"
+export PATH="/opt/texlive/2020/bin/x86_64-linux:$PATH"
