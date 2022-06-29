@@ -1,0 +1,79 @@
+#!/bin/bash
+
+DOTFILES=~/.dotfiles
+DRYRUN=${1:-false}
+
+_dryrun() {
+    [[ "${DRYRUN}" == "dryrun" ]] && return 0 || return 1
+}
+
+_log() {
+    echo "$( pwd ) > ${@}"
+}
+
+
+if _dryrun; then
+    _log "This is a dryrun."
+fi
+
+backup_and_link() {
+    __file=${1}
+    __dotfile=${DOTFILES}/${2}
+    __forcelink=${3:-false}
+    # remember current location
+    __cwd=$( pwd )
+    if [[ -r ${__dotfile} ]]; then
+        __filebase=$( basename ${__file} )
+        __filedir=$( dirname ${__file} )
+
+        # the filepath may have been provided relative to HOME
+        cd ${HOME}
+        #======================
+        if ! _dryrun; then
+            [[ ! -d ${__filedir} ]] && mkdir -p ${__filedir}
+        fi
+        #======================
+        cd ${__filedir}
+        _log
+
+        # backup if this is not a link
+        if [[ ! -L ${__filebase} ]]; then
+            __bakfile=${__filebase}_$( date +%Y-%m-%d )
+            _log "Backing up ${__filebase} to ${__bakfile}"
+            #======================
+            if ! _dryrun; then
+                [[ -d ${__filebase} ]] && mv ${__filebase} ${__bakfile}
+                [[ -f ${__filebase} ]] && cp -p  ${__filebase} ${__bakfile}
+            fi
+            #======================
+        fi
+
+        # the actual link
+        if [[ -L ${__filebase} ]]; then
+            __linktgt=$( readlink -f ${__filebase} )
+            _log "${__filebase} linked to ${__linktgt}"
+            # force link if it is wrong
+            [[ "${__linktgt}" == "${__dotfile}" ]] || __forcelink=true
+            _log "Force Link: ${__forcelink}"
+        fi
+        if [[ ! -L ${__filebase} ]] || [[ "${__forcelink}" == "true" ]]; then
+            _log "Force link ${__filebase} to ${__dotfile}"
+            #======================
+            if ! _dryrun; then
+                ln -s --force ${__dotfile} ${__filebase}
+            fi
+            #======================
+        fi
+
+        cd ${__cwd}
+    else
+        _log "File not found: ${__dotfile}"
+    fi
+
+}
+
+backup_and_link .bashrc bash/bashrc
+backup_and_link .ssh/config ssh/config
+backup_and_link .vimrc vim/vimrc
+backup_and_link .vim vim/dotvim
+backup_and_link .jupyter/custom/custom.css python/jupyter_custom.css

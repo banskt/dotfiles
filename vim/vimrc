@@ -1,0 +1,39 @@
+" A wicked vimrc by Saikat Banerjee <not giving my email to spammers>
+" inspired by so many other people.
+" Special thanks to Douglas Black <https://dougblack.io/words/a-good-vimrc.html>
+" Colors {{{
+syntax enable           " enable syntax processing
+colorscheme badwolf
+let g:badwolf_tabline = 1 " how light to render the background of the tab line (the line at the top of the screen containing the various tabs (only in console mode)
+let g:badwolf_darkgutter = 1 " whether the line number, sign column, and fold column are rendered darker than the normal background
+set termguicolors
+" }}}
+" Spaces & Tabs {{{ https://vim.fandom.com/wiki/Indenting_source_code
+set tabstop=4           " number of visual spaces per tab
+set softtabstop=4       " number of spaces in tab when editing
+set shiftwidth=4        " affects how automatic indentation works
+" exclude Makefiles from tab expansion
+let _curfile = expand("%:t")
+if _curfile =~ "Makefile" || _curfile =~ "makefile" || _curfile =~ ".*\.mk"
+set noexpandtab
+else
+set expandtab           " use spaces for tabs
+endif
+set autoindent          " copy the indentation from the previous line
+" }}}
+" UI Layout {{{
+set ruler               " ruler is displayed on the right side of the status line at the bottom of the window.
+set number              " show line numbers
+set showcmd             " show command in bottom bar
+set nocursorline        " highlight current line
+set wildmenu            " enhanced mode command line completion 
+set lazyredraw          " don’t update screen during macro and script execution 
+set showmatch           " higlight matching parenthesis
+set fillchars+=vert:┃
+" }}}
+" Searching {{{
+set ignorecase          " ignore case when searching
+set incsearch           " search as characters are entered
+set hlsearch            " highlight all matches
+" }}}
+autocmd FileType gitcommit set tw=72

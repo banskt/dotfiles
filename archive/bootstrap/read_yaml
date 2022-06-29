@@ -1,0 +1,332 @@
+#!/bin/bash
+
+# Keys cannot have space
+
+# https://stackoverflow.com/questions/10586153/how-to-split-a-string-into-an-array-in-bash
+# https://stackoverflow.com/questions/16860877/remove-an-element-from-a-bash-array
+# https://stackoverflow.com/questions/37617297/bash-add-value-to-associative-array-while-a-key-value-already-exists
+
+
+function collection_print() {
+    local __i__ __val__
+    local __arr__=$1
+    for __i__ in $( eval echo "\${$__arr__[keys]}" ); do
+        __val__="$( eval echo "\"\${$__arr__[$__i__]}\"" )"
+        echo "$2$__val__ = $__i__"
+    done
+
+    for __c__ in $( eval echo "\${$__arr__[children]}" ); do
+        echo -e "$2$__c__$2{\n"
+        collection_print "$__c__" "  $2"
+        echo -e "\n$2}"
+    done
+
+}
+
+
+# Array mapper. Calls map_fn for each item ($1) and index ($2) in array, and
+# prints whatever map_fn prints. If map_fn is omitted, all input array items
+# are printed.
+# Usage: array_map array_name [map_fn]
+function array_map() {
+    local __i__ __val__ __arr__=$1; shift
+    for __i__ in $( eval echo "\${!$__arr__[@]}" ); do
+        __val__="$( eval echo "\"\${$__arr__[$__i__]}\"" )"
+        if [[ "$1" ]]; then
+            "$@" "$__val__" $__i__
+        else
+            echo "Key:<$__i__>, Value: <$__val__>"
+        fi
+    done
+}
+
+# print a data collection
+print_collection() {
+
+    # helper to get array value at key
+    value() { eval echo \${$1[$2]}; }
+
+    for k in $(value $1 keys)
+    do
+        echo "$2$k = $(value $1 $k)"
+    done
+
+    for c in $(value $1 children)
+    do
+        echo -e "$2$c\n$2{"
+        print_collection $c "  $2"
+        echo "$2}"
+    done
+}
+
+yay_parse_dev() {
+   # find input file
+    for f in "$1" "$1.yay" "$1.yml"
+    do
+        [[ -f "$f" ]] && input="$f" && break
+    done
+    [[ -z "$input" ]] && exit 1
+
+    # use given dataset prefix or imply from file name
+    [[ ! -z "$2" ]] && local prefix="$2" || {
+        local prefix=$(basename "$input"); prefix=${prefix%.*}
+    }
+
+    echo "declare -g -A $prefix;"
+
+    local s='[[:space:]]*'
+    local w='[a-zA-Z0-9_~\/\.]*' 
+    local fs="»" # $(echo @|tr @ '\034')
+    sed -n -e "s|^\($s\)\($w\)$s:$s\"\(.*\)\"$s\$|\1$fs\2$fs\3|p" \
+           -e "s|^\($s\)\($w\)$s:$s\(.*\)$s\$|\1$fs\2$fs\3|p" "$input" |
+    awk -F$fs '{
+        indent       = length($1)/2;
+        dirtykey     = $2;
+        value        = $3;
+        key          = dirtykey;
+        nremoved     = gsub("[~\/\.]", "", key);
+        keys[indent] = key;
+
+        if (nremoved > 0) {
+            # store the value
+            oldvalue = value;
+            oldkey   = dirtykey;
+            value    = "";
+        }
+
+
+        # remove keys left behind if prior row was indented more than this row
+        for (i in keys) {if (i > indent) {delete keys[i]}}
+
+
+        # No prefix or parent for the top level (indent zero)
+        root_prefix = "'$prefix'";
+        array_name  = root_prefix;
+        if (indent > 0) {
+            for (i = 0; i < indent; ++i) {
+                array_name = array_name"_"keys[i]
+            }
+        }
+
+        
+        #printf ("\n\nDebug>>\n");
+        #printf ("%s|%d --> %s, %s\n", $1, indent, key, value)
+        # print ("=== Keys ===");
+        # for (i in keys) { print keys[i] };
+        # print ("============");
+        # printf("%s|%d --> Old array name: %s\n", $1, indent, array_name);
+        # printf("%s|%d --> New array name: %s\n", $1, indent, suggested_name);
+        # #printf("%s|%d --> Dirtykey: %s, #sub: %d\n", $1, indent, dirtykey, nsub);
+        # if (length(value) > 0) {
+        #     printf("%s|%d --> Add to key, value pair\n", $1, indent);
+        #     printf("%s|%d --> Key: %s, Value: %s, Length: %d\n", $1, indent, key, value, length(value));
+        # } else {
+        #     child_name = root_prefix"_"key
+        #     printf("%s|%d --> Create new child\n", $1, indent);
+        #     printf("%s|%d --> old child name: %s\n", $1, indent, child_name);
+        #     printf("%s|%d --> new child name: %s_%s\n", $1, indent, suggested_name, key);
+        # }
+
+
+        if (length(value) > 0) {
+            # value
+            printf("%s[%s]=\"%s\";\n", array_name, key, value);
+            printf("%s[keys]+=\" %s\";\n", array_name, key);
+        } else {
+            # collection, create new child
+            child_name = array_name"_"key
+            printf("%s[children]+=\" %s\";\n", array_name, child_name)
+            printf("declare -g -A %s;\n", child_name)
+            printf("%s[parent]+=\" %s\";\n", child_name, array_name)
+        }
+
+        if (nremoved > 0) {
+            # value
+            printf("%s[target]=\"%s\";\n", child_name, oldkey);
+            printf("%s[keys]+=\" target\";\n", child_name);
+            if (length(oldvalue) > 0) {
+                printf("%s[path]=\"%s\";\n", child_name, oldvalue);
+                printf("%s[keys]+=\" path\";\n", child_name);
+            }
+        }
+
+    }'
+}
+
+yay_parse_() {
+    # find input file
+    for f in "${1}" "${1}.yay" "${1}.yml"
+    do
+        [[ -f "${f}" ]] && input="${f}" && break
+    done
+    [[ -z "${input}" ]] && exit 1
+
+    # use given dataset prefix or imply from file name
+    [[ ! -z "${2}" ]] && local prefix="${2}" || {
+        local prefix=$(basename "${input}"); prefix=${prefix%.*}
+    }
+
+    echo "unset ${prefix}"
+    echo "declare -g -A ${prefix};"
+    #echo "${input}" "${prefix}"
+
+    local s='[[:space:]]*'
+    # match all keys with
+    #    a-z, A-Z, 0-9
+    # and special characters: ~ / .
+    local w='[a-zA-Z0-9_~\/\.]*'
+    local fs='»'  #fs=$(echo @|tr @ '\034')
+    #echo "Process the input file."
+    #sed -n -e "s|^\($s\)\($w\)$s:$s\"\(.*\)\"$s\$|\1$fs\2$fs\3|p" \
+    #       -e "s|^\($s\)\($w\)$s:$s\(.*\)$s\$|\1$fs\2$fs\3|p" "${input}" |
+
+   local s='[[:space:]]*' w='[a-zA-Z0-9_]*' fs=$(echo @|tr @ '\034')
+   sed -n -e "s|^\($s\)\($w\)$s:$s\"\(.*\)\"$s\$|\1$fs\2$fs\3|p" \
+          -e "s|^\($s\)\($w\)$s:$s\(.*\)$s\$|\1$fs\2$fs\3|p" "$input" |
+   awk -F$fs '{
+      indent       = length($1)/2;
+      key          = $2;
+      value        = $3;
+
+      # No prefix or parent for the top level (indent zero)
+      root_prefix  = "'$prefix'_";
+      if (indent ==0 ) {
+        prefix = "";          parent_key = "'$prefix'";
+      } else {
+        prefix = root_prefix; parent_key = keys[indent-1];
+      }
+
+      keys[indent] = key;
+
+      # remove keys left behind if prior row was indented more than this row
+      for (i in keys) {if (i > indent) {delete keys[i]}}
+
+      if (length(value) > 0) {
+         # value
+         printf("%s%s[%s]=\"%s\";\n", prefix, parent_key , key, value);
+         printf("%s%s[keys]+=\" %s\";\n", prefix, parent_key , key);
+      } else {
+         # collection
+         printf("%s%s[children]+=\" %s%s\";\n", prefix, parent_key , root_prefix, key);
+         printf("declare -g -A %s%s;\n", root_prefix, key);
+         printf("%s%s[parent]=\"%s%s\";\n", root_prefix, key, prefix, parent_key);
+      }
+   }'
+
+##    awk -F$fs '{
+##        indent       = length($1)/4;
+##        dirtykey     = $2;
+##        value        = $3;
+##        key          = dirtykey
+##        nremoved     = gsub("[~\/\.]", "", key)
+##        if (nremoved > 0) {
+##            if (length(value) == 0) {
+##                value = dirtykey
+##            }
+##        }
+##
+##        # No prefix or parent for the top level (indent zero)
+##        root_prefix  = "'$prefix'_";
+##        if (indent ==0 ) {
+##            prefix = "";
+##            parent_key = "'$prefix'";
+##        } else {
+##            prefix = root_prefix;
+##            parent_key = keys[indent-1];
+##        }
+##
+##        keys[indent] = key;
+##
+##        printf ("\n\nDebug>>\n")
+##
+##        # remove keys left behind if prior row was indented more than this row
+##        for (i in keys) {if (i > indent) {delete keys[i]}}
+##
+##        printf("%s|%d --> Array Name: %s%s, Parent: %s\n", $1, indent, prefix, parent_key, parent_key);
+##        printf("%s|%d --> Key: %s, Value: %s, Length: %d\n", $1, indent, key, value, length(value));
+##        printf("%s|%d --> Dirtykey: %s, #sub: %d\n", $1, indent, dirtykey, nsub);
+##        print ("=== Keys ===");
+##        for (i in keys) { print keys[i] };
+##        print ("============");
+##
+##        if (length(value) > 0) {
+##        # value
+##            printf("%s%s[%s]=\"%s\";\n", prefix, parent_key , key, value);
+##            printf("%s%s[keys]+=\" %s\";\n", prefix, parent_key , key);
+##        } else {
+##            # collection
+##            printf("%s%s[children]+=\" %s%s\";\n", prefix, parent_key , root_prefix, key);
+##            printf("declare -g -A %s%s;\n", root_prefix, key);
+##            printf("%s%s[parent]=\"%s%s\";\n", root_prefix, key, prefix, parent_key);
+##        }
+##
+##    }'
+}
+
+
+
+## # Print bash array in the format "i <val>" (one per line) for debugging.
+## function array_print() { array_map $1 __array_print; }
+## function __array_print() { echo "<$2> : <$1>"; }
+## 
+## function array_create() {
+##     echo "declare -g -A ${1}"
+## }
+## 
+## function array_connect() {
+##     # https://stackoverflow.com/questions/46241172/check-if-associative-array-element-exists-in-bash
+##     _parent=${1}
+##     _child=${2}
+##     _sep=":"
+##     if [[ -v ${_parent}[children] ]]; then
+##         echo "Children exists"
+##         eval "${_parent}[children]+=\"${_sep}${_child}\""
+##     else
+##         echo "No children array"
+##         #echo "${_parent}[children]=\"${_child}\""
+##         eval "${_parent}[children]=\"${_child}\""
+##     fi
+##     if [[ ! -v ${_child}[parent] ]]; then
+##         echo "Adding parent to ${_child}"
+##         eval "${_child}[parent]=\"${_parent}\""
+##     fi
+## }
+
+## ARR="dotboot"
+## ARR_CHILD1="dotboot_link"
+## ARR_CHILD2="dotboot_copy"
+## ARR_CHILD11="dotboot_link_vimrc"
+## ARR_CHILD12="dotboot_link_foo"
+## ARR_CHILD21="dotboot_copy_git"
+## ARR_CHILD22="dotboot_copy_bar"
+## unset ${ARR}
+## declare -g -A ${ARR}
+## #eval echo "$ARR[root_key1]=\"something\""
+## #_=$( eval echo "$ARR[root_key1]=\"something\"" )
+## dotboot[root_key2]="some other value"
+## dotboot[no_space_allowed]=true
+## 
+## declare -g -A ${ARR_CHILD1}
+## declare -g -A ${ARR_CHILD2}
+## array_connect $ARR $ARR_CHILD1
+## array_connect $ARR $ARR_CHILD2
+## 
+## echo "Parent."
+## array_print ${ARR}
+## 
+## echo ""
+## echo "Child1"
+## array_print ${ARR_CHILD1}
+## 
+## echo ""
+## echo "Child2"
+## array_print ${ARR_CHILD2}
+
+yay() { eval $(yay_parse_dev "$@"); }
+
+if [[ ${1} == "runfull" ]]; then
+    yay example.yml adot
+    collection_print adot
+else 
+    yay_parse_dev example.yml adot
+fi

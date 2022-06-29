@@ -1,0 +1,98 @@
+## default for all ##
+Host *
+     ForwardAgent no
+     ForwardX11 no
+     ForwardX11Trusted yes 
+     Protocol 2
+     ServerAliveInterval 60
+     ServerAliveCountMax 30
+
+Host rcc 
+    Hostname midway2.rcc.uchicago.edu
+    User saikatbanerjee
+    PreferredAuthentications keyboard-interactive
+    PasswordAuthentication yes 
+    PubkeyAuthentication no
+    ForwardAgent yes 
+    ForwardX11 yes 
+
+Host mpg 
+    HostName login.mpibpc.mpg.de
+    User sbanerj
+    IdentityFile ~/.ssh/mpg_key
+    IdentitiesOnly yes 
+
+# connect to GWDG cluster front-ends with VPN
+Host cluster1
+    Hostname gwdu101.gwdg.de
+    User sbanerj
+    IdentityFile ~/.ssh/gwdg_key
+    IdentitiesOnly yes 
+
+Host cluster2
+    Hostname gwdu102.gwdg.de
+    User sbanerj
+    IdentityFile ~/.ssh/gwdg_key
+    IdentitiesOnly yes 
+
+Host cluster3
+    Hostname gwdu103.gwdg.de
+    User sbanerj
+    IdentityFile ~/.ssh/gwdg_key
+    IdentitiesOnly yes 
+
+# other office computers
+Host minion2
+    Hostname 10.208.13.232
+    User sbanerj
+    IdentityFile ~/.ssh/mpg_key
+    IdentitiesOnly yes 
+
+Host gwdg_ftp
+    Hostname login.gwdg.de
+    User compbiol
+    IdentityFile ~/.ssh/gwdg_key
+    IdentitiesOnly yes
+
+# connect to GWDG cluster without VPN
+Host gwdg
+    Hostname login.gwdg.de
+    User sbanerj
+    IdentityFile ~/.ssh/gwdg_key
+    IdentitiesOnly yes
+
+Host sscluster1
+    Hostname gwdu101.gwdg.de
+    ProxyCommand ssh sbanerj@gwdg nc %h %p
+    User sbanerj
+    IdentityFile ~/.ssh/gwdg_key
+    IdentitiesOnly yes
+
+Host sscluster2
+    Hostname gwdu102.gwdg.de
+    ProxyCommand ssh sbanerj@gwdg nc %h %p
+    User sbanerj
+    IdentityFile ~/.ssh/gwdg_key
+    IdentitiesOnly yes
+
+# Github
+Host github.com
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/github_key
+    IdentitiesOnly yes
+
+# Vultr hosting
+Host vultr
+    Hostname 80.240.31.248
+    User saikat
+    Port 44933
+    IdentityFile ~/.ssh/vultr_key
+    IdentitiesOnly yes
+
+# Feralhosting
+Host feral
+    Hostname aloadae.feralhosting.com
+    User banskt
+    IdentityFile ~/.ssh/feralhosting_key
+    IdentitiesOnly yes

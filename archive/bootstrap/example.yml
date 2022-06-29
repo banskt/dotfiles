@@ -1,0 +1,32 @@
+root_key1: this is value one
+root_key2: "this is value two"
+
+links:
+  foo:
+    target: ~/.foorc
+    path: foo/.foorc
+    relink: true
+    if: [ $( is_os ) == "debian" ]
+    if2: something
+  ~/.vimrc:
+    path: vim/.vimrc
+  ~/.bar: some/bar/path
+
+
+drink:
+  state: liquid
+  coffee:
+    serving:
+      temp: hot
+      container: mug
+    colour: brown
+  orange_juice:
+    best_served: cold
+    colour: orange
+
+food:
+  state: solid
+  apple_pie:
+    best_served: warm
+
+root_key_3: this is value three

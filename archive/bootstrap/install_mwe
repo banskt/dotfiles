@@ -1,0 +1,15 @@
+defaults:
+    link:
+        create: true
+        relink: true
+
+link:
+    ~/.vimrc: vim/.vimrc
+        relink: false
+    foorc: foo/.foorc
+        relink: false
+    # but we can comment here, right?
+    bar:
+        if then else: [ $( is_os ) == "debian" ]
+        path: custom/path/bar
+        relink: true

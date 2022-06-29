@@ -13,20 +13,20 @@ _log_debug() { [[ ${DOTDEBUG} == 0 ]] && echo "${@}"; }
 dotsrc() {
     local file
     if [ -d ${1} ]; then
-        _log_debug "Loading ${1} directory"
+        _log_debug "Searching directory ${1}"
         for file in ${1}/*; do
             _log_debug "File found: ${file}"
-            dotsrc ${file}
+            [[ -d "${file}" ]] && dotsrc ${file}
+            [[ -f "${file}" ]] && dotsrc ${file%.sh}.sh
         done
     fi
-    if [ -f ${1} ]; then
+    if [ -f "${1}" ]; then
         _log_debug "Loading file ${1}"
         source ${1}
     fi
 }
 
 loadbashrc() { 
-    _log_debug "Bash: Loading ${1} utilities from ${DOTFILES}/bash/${1}.bashrc"
     dotsrc ${DOTFILES}/bash/${1}.bashrc; 
 }
 
