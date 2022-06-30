@@ -16,6 +16,12 @@ Host rcc
     ForwardAgent yes 
     ForwardX11 yes 
 
+Host revati
+    Hostname 205.208.52.208
+    User saikat
+    IdentityFile ~/.ssh/revati_key
+    IdentitiesOnly yes
+
 Host mpg 
     HostName login.mpibpc.mpg.de
     User sbanerj

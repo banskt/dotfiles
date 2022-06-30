@@ -36,4 +36,4 @@ set ignorecase          " ignore case when searching
 set incsearch           " search as characters are entered
 set hlsearch            " highlight all matches
 " }}}
-autocmd FileType gitcommit set tw=72
+autocmd FileType gitcommit setlocal tw=72

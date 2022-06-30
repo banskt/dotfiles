@@ -7,73 +7,96 @@ _dryrun() {
     [[ "${DRYRUN}" == "dryrun" ]] && return 0 || return 1
 }
 
-_log() {
-    echo "$( pwd ) > ${@}"
-}
+# Logging stuff.
+function _log()       { echo "$( pwd ) > ${@}"; }
+function e_header()   { echo -e "\n\033[1m$@\033[0m"; }
+function e_success()  { echo -e " \033[1;32m✔\033[0m  $@"; }
+function e_error()    { echo -e " \033[1;31m✖\033[0m  $@"; }
+function e_arrow()    { echo -e " \033[1;34m➜\033[0m  $@"; }
 
 
 if _dryrun; then
-    _log "This is a dryrun."
+    e_arrow "This is a dryrun."
 fi
 
-backup_and_link() {
-    __file=${1}
+# Destination may or may not be relative to $HOME
+# Destination may be a FILE or DIRECTORY
+# Source is always some file in the DOTFILES,
+# which must be located at ~/.dotfiles
+
+function backup_and_link() {
+
+    __dest=${1}
     __dotfile=${DOTFILES}/${2}
     __forcelink=${3:-false}
+
+    e_header "${__dest}"
+
     # remember current location
     __cwd=$( pwd )
-    if [[ -r ${__dotfile} ]]; then
-        __filebase=$( basename ${__file} )
-        __filedir=$( dirname ${__file} )
+    # the filepath may have been provided relative to HOME
+    cd ${HOME}
 
-        # the filepath may have been provided relative to HOME
-        cd ${HOME}
-        #======================
-        if ! _dryrun; then
-            [[ ! -d ${__filedir} ]] && mkdir -p ${__filedir}
-        fi
-        #======================
-        cd ${__filedir}
-        _log
 
-        # backup if this is not a link
-        if [[ ! -L ${__filebase} ]]; then
-            __bakfile=${__filebase}_$( date +%Y-%m-%d )
-            _log "Backing up ${__filebase} to ${__bakfile}"
-            #======================
-            if ! _dryrun; then
-                [[ -d ${__filebase} ]] && mv ${__filebase} ${__bakfile}
-                [[ -f ${__filebase} ]] && cp -p  ${__filebase} ${__bakfile}
-            fi
-            #======================
+    # ================
+    # Checks
+    # ================
+    __do_action=0
+
+    # are source and destination same?
+    [[ "${__dest}" -ef "${__dotfile}" ]] && __do_action=1 && e_error "Skip: same file."
+
+    # do we need to try a forced action if the above check failed?
+    # only check forceact if the above check failed.
+    if [[ "${__do_action}" == "1" ]]; then
+        [[ "${__forcelink}" == "force" ]] && __do_action=0 && e_error "Warn: force link."
+    fi
+
+    # do the dotfile exist?
+    # must abort the process, even if forceact is true.
+    [[ ! -r ${__dotfile} ]] && __do_action=1 && e_error "Fatal: ${__dotfile} not found."
+
+    # ================
+    # Main action
+    # ================
+    if [[ "${__do_action}" == "0" ]]; then
+        
+        # find the destination file name and directory
+        __destbase=$( basename ${__dest} )
+        __destdir=$( dirname ${__dest} )
+
+        # create the destination directory is absent
+        ! _dryrun && [[ ! -d ${__destdir} ]] && mkdir -p ${__destdir}
+
+        # backup if destination exists and 
+        if [[ -e ${__dest} ]]; then 
+            e_arrow "Backing up ${__dest}"
+            BACKUPFLAG=1
+            [[ ! -d "${BACKUPDIR}" ]] && ! _dryrun && mkdir -p ${BACKUPDIR}
+            ! _dryrun && mv "${__dest}" "${BACKUPDIR}"
         fi
 
         # the actual link
-        if [[ -L ${__filebase} ]]; then
-            __linktgt=$( readlink -f ${__filebase} )
-            _log "${__filebase} linked to ${__linktgt}"
-            # force link if it is wrong
-            [[ "${__linktgt}" == "${__dotfile}" ]] || __forcelink=true
-            _log "Force Link: ${__forcelink}"
+        e_success "Linking ${__dest} to ${__dotfile}."
+        if ! _dryrun; then
+            cd ${__destdir}
+            ln -s --force ${__dotfile} ${__destbase}
+            cd ${HOME}
         fi
-        if [[ ! -L ${__filebase} ]] || [[ "${__forcelink}" == "true" ]]; then
-            _log "Force link ${__filebase} to ${__dotfile}"
-            #======================
-            if ! _dryrun; then
-                ln -s --force ${__dotfile} ${__filebase}
-            fi
-            #======================
-        fi
-
-        cd ${__cwd}
-    else
-        _log "File not found: ${__dotfile}"
     fi
-
+    # do not forget to move back to the directory where the command was launched from
+    cd ${__cwd}
 }
+
+BACKUPDIR="${HOME}/.backdotfiles/$(date "+%Y_%m_%d-%H_%M_%S")/"
+BACKUPFLAG=
 
 backup_and_link .bashrc bash/bashrc
 backup_and_link .ssh/config ssh/config
 backup_and_link .vimrc vim/vimrc
 backup_and_link .vim vim/dotvim
 backup_and_link .jupyter/custom/custom.css python/jupyter_custom.css
+
+if [[ "${BACKUPFLAG}" == "1" ]]; then
+    echo -e "\nBackups were moved to ${BACKUPDIR}"
+fi
