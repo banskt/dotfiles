@@ -102,7 +102,9 @@ _do_close() {
     if [[ ! -z "${remote_uri}" ]]; then
         remote_port=$(  echo "${remote_uri}" | sed -e "s/[^/]*\/\/\([^:]*\):\([^\?]*\)\/?token=\(.*\)/\2/" )
         if [[ ! -z ${remote_port} ]]; then
-            ssh-localportfwd close ${SERVER} ${remote_port} ${remote_port} && exitcode=0
+            ssh-localportfwd close ${SERVER} ${remote_port} ${remote_port} # && exitcode=0
+            # exitcode should be 0 even if ssh-localportfwd fails
+            exitcode=0
         else
             echo "Error: Could not find remote port."
         fi
