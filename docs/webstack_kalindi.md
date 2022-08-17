@@ -331,6 +331,33 @@ lemp start # start the service
 lemp stop # stop the service
 ```
 
+### Create modulefile
+
+Modulefile `/opt/modulefiles/web/php/8.0.0` contents:
+
+```tcl
+#%Module1.0#####################################################################
+#
+
+global version
+global phphome
+
+set version 8.0.0
+set phphome /opt/webstack/php/8.0.0
+
+proc ModulesHelp { } {
+    global version
+    puts stderr "\tPHP $version \n"
+    puts stderr "\tThis module puts the PHP binary in path."
+}
+
+module-whatis "loads PHP $version binary"
+
+prepend-path PATH $phphome/bin
+```
+
+Now, I can load PHP cli using `module load php/8.0.0`
+
 ### Composer
 
 Composer is a tool for dependency management in PHP. Installation instructions for composer is available [here](https://getcomposer.org/download/).
@@ -350,10 +377,10 @@ exit
 
 Nice instructions [here](https://ma.ttias.be/how-to-compile-and-install-php-extensions-from-source/).
 
-```
+```bash
 su -l webdev
-cd apps/php/php-8.0.0/ext/pdo_mysql/modules
-cd pdo_mysql
+module load php/8.0.0
+cd apps/php/php-8.0.0/ext/pdo_mysql
 phpize
 ./configure
 make
