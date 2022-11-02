@@ -25,6 +25,15 @@ Host rcc1
     ForwardAgent yes 
     ForwardX11 yes 
 
+Host rcc2 
+    Hostname midway2-login2.rcc.uchicago.edu
+    User saikatbanerjee
+    PreferredAuthentications keyboard-interactive
+    PasswordAuthentication yes 
+    PubkeyAuthentication no
+    ForwardAgent yes 
+    ForwardX11 yes 
+
 Host revati
     Hostname 205.208.52.153
     User saikat
