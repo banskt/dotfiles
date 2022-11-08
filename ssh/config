@@ -35,7 +35,7 @@ Host rcc2
     ForwardX11 yes 
 
 Host revati
-    Hostname 205.208.52.153
+    Hostname 205.208.32.68
     User saikat
     IdentityFile ~/.ssh/revati_key
     IdentitiesOnly yes
