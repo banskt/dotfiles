@@ -1,5 +1,6 @@
 let g:netrw_dirhistmax  =10
-let g:netrw_dirhistcnt =8
+let g:netrw_dirhistcnt =9
+let g:netrw_dirhist_9='/home/sbanerjee/Documents/work/sparse-regression/manuscript/arxiv'
 let g:netrw_dirhist_8='/opt/modulefiles/core'
 let g:netrw_dirhist_7='/home/saikat/Documents/work/sparse-regression/gradvi/src/gradvi/models/basis_matrix'
 let g:netrw_dirhist_6='/home/saikat/Documents/work/sparse-regression/gradvi/src/gradvi/tests'
@@ -9,4 +10,3 @@ let g:netrw_dirhist_3='/usr/local/bin'
 let g:netrw_dirhist_2='/home/saikat/.bash_history'
 let g:netrw_dirhist_1='/home/saikat/.config'
 let g:netrw_dirhist_0='/opt/intel/compilers_and_libraries_2020.4.304/linux'
-let g:netrw_dirhist_9='/home/saikat/Documents/work/sparse-regression/mr-ash-penalized/mr-ash-pen/src/mrashpen'

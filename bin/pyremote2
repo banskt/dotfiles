@@ -104,6 +104,7 @@ _do_close() {
         if [[ ! -z ${remote_port} ]]; then
             ssh-localportfwd close ${SERVER} ${remote_port} ${remote_port} # && exitcode=0
             # exitcode should be 0 even if ssh-localportfwd fails
+            _do_remove_saved
             exitcode=0
         else
             echo "Error: Could not find remote port."
