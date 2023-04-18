@@ -1,0 +1,20 @@
+#!/bin/bash
+
+LOGDIR="/home/saikatbanerjee/jupyter/logs"
+JPTJOB=$( sacct --format="JobID,Partition,State,NCPUS,Start,Elapsed,NodeList,JobName%90" -s RUNNING -X | grep "jupyter-notebook" )
+JPTID=$( echo ${JPTJOB} | awk '{print $1}')
+JPTSTATE=$( echo ${JPTJOB} | awk '{print $3}' )
+JPTCPUS=$( echo ${JPTJOB} | awk '{print $4}' )
+echo "State: ${JPTSTATE}"
+if [ ! -z ${JPTSTATE} ] && [ ${JPTSTATE} == "RUNNING" ]; then
+    JPTNODE=$( echo ${JPTJOB} | awk '{print $7}' )
+    REMOTE_URI=""
+    while [ -z "${REMOTE_URI}" ]; do
+        REMOTE_URI=$( cat ${LOGDIR}/jupyter-notebook-${JPTID}.log | grep "\/\?token=" | awk '{print $NF}' | head -n 1 )
+    done
+    JPTPORT=$(  echo $REMOTE_URI | sed -e "s/[^/]*\/\/\([^:]*\):\([^\?]*\)\/?token=\(.*\)/\2/" )
+    JPTTOKEN=$( echo $REMOTE_URI | sed -e "s/[^/]*\/\/\([^:]*\):\([^\?]*\)\/?token=\(.*\)/\3/" )
+    echo "Node: ${JPTNODE}"
+    echo "Port: ${JPTPORT}"
+    echo "Token: ${JPTTOKEN}"
+fi

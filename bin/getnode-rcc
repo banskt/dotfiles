@@ -1,0 +1,56 @@
+#!/bin/bash
+
+# USAGE
+#
+# Start an interactive shell in RCC with 1 CPU for 4 days
+#   bashnode
+# Start an interactive shell in RCC with 4 CPUs for 4 days
+#   bashnode -c 4 -X
+#
+
+RAND=$( cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 4 | head -n 1 )
+NUM_NODES="1"
+NUM_CPUS="1"
+PARTITION="mstephens"
+ACCOUNT="pi-mstephens"
+JOBNAME="interactive_${RAND}";
+TIMELIMIT="4-00:00:00";
+EXTRA_OPTIONS=();
+CMD="srun"
+
+while [[ $# -gt 0 ]]; do
+    key=$1
+    case $key in
+        -n)
+            NUM_NODES="$2"
+            shift
+            shift;;
+        -c)
+            NUM_CPUS="$2"
+            shift
+            shift;;
+        -p)
+            PARTITION="$2"
+            shift
+            shift;;
+        -J)
+            JOBNAME="$2"
+            shift
+            shift;;
+        -t)
+            TIMELIMIT="$2"
+            shift
+            shift;;
+        -X)
+            CMD="sinteractive"
+            shift;;
+        *)
+            EXTRA_OPTIONS+=("$1")
+            shift;;
+    esac
+done
+
+if [[ "${CMD}" == "srun" ]]; then EXTRA_OPTIONS+=(" --pty /bin/bash "); fi
+
+echo "Executing: ${CMD} --partition=${PARTITION} --account=${ACCOUNT} --time=${TIMELIMIT} --nodes=${NUM_NODES} --cpus-per-task=${NUM_CPUS} --job-name=${JOBNAME} ${EXTRA_OPTIONS[@]}"
+                 ${CMD} --partition=${PARTITION} --account=${ACCOUNT} --time=${TIMELIMIT} --nodes=${NUM_NODES} --cpus-per-task=${NUM_CPUS} --job-name=${JOBNAME} ${EXTRA_OPTIONS[@]}
