@@ -1,11 +1,17 @@
 ## default for all ##
 Host *
-     ForwardAgent no
-     ForwardX11 no
-     ForwardX11Trusted yes 
-     Protocol 2
-     ServerAliveInterval 60
-     ServerAliveCountMax 30
+    ForwardAgent no
+    ForwardX11 no
+    ForwardX11Trusted yes 
+    Protocol 2
+    ServerAliveInterval 60
+    ServerAliveCountMax 30
+
+Host nygc
+    Hostname pe2-login
+    User sbanerjee
+    IdentityFile ~/.ssh/nygc_key
+    IdentitiesOnly yes
 
 Host rcc 
     Hostname midway2.rcc.uchicago.edu
