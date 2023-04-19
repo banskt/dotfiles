@@ -10,6 +10,9 @@ Host *
 Host nygc
     Hostname pe2-login
     User sbanerjee
+    PreferredAuthentications password
+    PasswordAuthentication yes 
+    PubkeyAuthentication no
     IdentityFile ~/.ssh/nygc_key
     IdentitiesOnly yes
 
@@ -109,6 +112,7 @@ Host sscluster2
 Host github.com
     HostName github.com
     User git
+    PubkeyAuthentication yes
     IdentityFile ~/.ssh/github_key
     IdentitiesOnly yes
 
