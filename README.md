@@ -15,7 +15,7 @@ Note: Run all commands from the `$HOME` directory.
   ```
   source ~/.dotfiles/install
   chmod 700 ~/.ssh
-  chmod 600 ~/.ssh/config
+  chmod 644 ~/.ssh/config
   ```
 
   3. Create the SSH keys. For example,

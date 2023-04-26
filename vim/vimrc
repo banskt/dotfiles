@@ -36,4 +36,9 @@ set ignorecase          " ignore case when searching
 set incsearch           " search as characters are entered
 set hlsearch            " highlight all matches
 " }}}
+" Keys {{{
+set backspace=indent,eol,start " delete characters in the insert mode with backspace key
+" }}}
+" Filetype specific {{{
 autocmd FileType gitcommit setlocal tw=72
+" }}}

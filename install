@@ -96,6 +96,7 @@ backup_and_link .ssh/config ssh/config
 backup_and_link .vimrc vim/vimrc
 backup_and_link .vim vim/dotvim
 backup_and_link .jupyter/custom/custom.css python/jupyter_custom.css
+backup_and_link .condarc python/condarc
 
 if [[ "${BACKUPFLAG}" == "1" ]]; then
     echo -e "\nBackups were moved to ${BACKUPDIR}"
