@@ -6,8 +6,8 @@ Host *
     Protocol 2
     ServerAliveInterval 60
     ServerAliveCountMax 30
-    PreferredAuthentications password
     PasswordAuthentication yes 
+#    PreferredAuthentications password
 
 Host nygc
     Hostname pe2-login
