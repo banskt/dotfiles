@@ -11,7 +11,7 @@
 RAND=$( cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 4 | head -n 1 )
 NUM_NODES="1"
 NUM_CPUS="1"
-MEMORY="5G"
+MEMORY=""
 PARTITION="pe2"
 JOBNAME="interactive_${RAND}";
 TIMELIMIT="7-00:00:00";
@@ -54,6 +54,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [[ -z "${MEMORY}" ]]; then MEMORY=$(( $NUM_NODES * $NUM_CPUS * 5 ))G; fi
 if [[ "${CMD}" == "srun" ]]; then EXTRA_OPTIONS+=(" --pty /bin/bash "); fi
 
 echo "Executing: ${CMD} --partition=${PARTITION} --time=${TIMELIMIT} --nodes=${NUM_NODES} --cpus-per-task=${NUM_CPUS} --mem=${MEMORY} --job-name=${JOBNAME} ${EXTRA_OPTIONS[@]}"
