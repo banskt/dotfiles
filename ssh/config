@@ -6,8 +6,8 @@ Host *
     Protocol 2
     ServerAliveInterval 60
     ServerAliveCountMax 30
-    PreferredAuthentications password
     PasswordAuthentication yes 
+    PreferredAuthentications password,hostbased,publickey,keyboard-interactive
 
 Host nygc
     Hostname pe2-login
@@ -15,8 +15,6 @@ Host nygc
     PreferredAuthentications password
     PasswordAuthentication yes 
     PubkeyAuthentication no
-    IdentityFile ~/.ssh/nygc_key
-    IdentitiesOnly yes
 
 Host rcc 
     Hostname midway2.rcc.uchicago.edu
