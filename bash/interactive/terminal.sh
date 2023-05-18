@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # show all available bash colors on the terminal
 #   $ show-bash-colors

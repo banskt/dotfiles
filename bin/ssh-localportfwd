@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Local port forwarding allows you to forward a port on the local (ssh client) machine 
 # to a port on the remote (ssh server) machine, which is then forwarded to a port on 

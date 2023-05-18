@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 DOTFILES=~/.dotfiles
 DRYRUN=${1:-false}

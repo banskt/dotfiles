@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Import all interactive plugins
 dotsrc ${DOTFILES}/bash/interactive
@@ -16,6 +16,10 @@ if [ -x /usr/bin/dircolors ]; then
     alias grep='grep --color=auto'
     alias fgrep='fgrep --color=auto'
     alias egrep='egrep --color=auto'
+fi
+
+if is_osx; then
+    alias ls='gls --color=auto'
 fi
 
 alias ll='ls -lhF --group-directories-first'

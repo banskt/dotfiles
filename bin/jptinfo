@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 LOGDIR="/home/saikatbanerjee/jupyter/logs"
 JPTJOB=$( sacct --format="JobID,Partition,State,NCPUS,Start,Elapsed,NodeList,JobName%90" -s RUNNING -X | grep "jupyter-notebook" )

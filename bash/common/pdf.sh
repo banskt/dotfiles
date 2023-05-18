@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 pdf-extract() {
     # extract pages from PDF, uses 3 arguments:

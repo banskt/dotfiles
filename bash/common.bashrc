@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # load common plugins
 dotsrc ${DOTFILES}/bash/common

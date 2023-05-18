@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # https://verynomagic.com/2015/06/say-no-to-sshpass.html
 # http://silmor.de/notty.php

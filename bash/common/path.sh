@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # get the absolute path of directory of a file, 
 # particularly useful to know the location of a running script:

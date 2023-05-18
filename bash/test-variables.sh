@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 #test-variable() { [[ -z "${1}" ]] && echo "unset or empty" || echo "${1}"; }
 #test-unset() { [[ -z "${1+bar}" ]] && echo "unset" || echo "${1+bar}"; }
