@@ -24,7 +24,21 @@ update-texlive-repository () {
 ## Logfile: /opt/texlive/2020/install-tl.log
 ##
 ## The source directory can be specified in .custom/bashrc
-[[ -z "${TEXLIVESRC}" ]] && TEXLIVESRC="/opt/texlive/2020"
-export INFOPATH="${TEXLIVESRC}/texmf-dist/doc/info:$INFOPATH"
-export MANPATH="${TEXLIVESRC}/texmf-dist/doc/man:$MANPATH"
-export PATH="${TEXLIVESRC}/bin/x86_64-linux:$PATH"
+
+## Add /opt/texlive/2023/texmf-dist/doc/man to MANPATH.
+## Add /opt/texlive/2023/texmf-dist/doc/info to INFOPATH.
+## Most importantly, add /opt/texlive/2023/bin/universal-darwin
+## to your PATH for current and future sessions.
+## Logfile: /opt/texlive/2023/install-tl.log
+
+if is_osx; then
+    [[ -z "${TEXLIVESRC}" ]] && TEXLIVESRC="/opt/texlive/2023"
+    export INFOPATH="${TEXLIVESRC}/texmf-dist/doc/info:$INFOPATH"
+    export MANPATH="${TEXLIVESRC}/texmf-dist/doc/man:$MANPATH"
+    export PATH="${TEXLIVESRC}/bin/universal-darwin:$PATH"
+else
+    [[ -z "${TEXLIVESRC}" ]] && TEXLIVESRC="/opt/texlive/2020"
+    export INFOPATH="${TEXLIVESRC}/texmf-dist/doc/info:$INFOPATH"
+    export MANPATH="${TEXLIVESRC}/texmf-dist/doc/man:$MANPATH"
+    export PATH="${TEXLIVESRC}/bin/x86_64-linux:$PATH"
+fi

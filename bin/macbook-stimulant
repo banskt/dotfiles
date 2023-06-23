@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+
+_is_sleep_disabled() {
+    SLEEPDISABLED_FLAG=$( pmset -g | grep "SleepDisabled" | awk '{print $2}' )
+    [[ "$SLEEPDISABLED_FLAG" == 1 ]] || return 1
+}
+
+_is_sleep_enabled() {
+    ! _is_sleep_disabled
+}
+
+_show_status() {
+    _is_sleep_disabled && echo "on" || echo "off"
+}
+
+_disable_sleep() {
+    if _is_sleep_enabled; then
+        echo "Overpowering the overlord Apple."
+        #sudo pmset -a sleep 0
+        #sudo pmset -a hibernatemode 0
+        sudo pmset -a disablesleep 1
+    else
+        echo "Stimulant is on. Nothing to do."
+    fi
+    if _is_sleep_disabled; then
+        echo "Sleep disabled."
+        echo ""
+        echo "WARNING: Remember to enable sleeping at the end of the session."
+        echo "If you don't, the system will never go to sleep and will drain"
+        echo "the battery."
+    fi
+}
+
+
+_enable_sleep() {
+    if _is_sleep_disabled; then
+        echo "Going back to obedience."
+        #sudo pmset -a sleep 1
+        #sudo pmset -a hibernatemode 3
+        sudo pmset -a disablesleep 0
+    else
+        echo "Stimulant is off. Nothing to do."
+    fi
+    if _is_sleep_enabled; then
+        echo "Success."
+    fi
+}
+
+
+_show_help() {
+    CMD="$( basename ${BASH_SOURCE[0]} )"
+    echo "Prevents MacOS to go to sleep, so that a Macbook can be used in"
+    echo "clamshell mode without connecting the power adapter."
+    echo ""
+    echo "Note: My overlord Apple knows what we want better than we do."
+    echo "MacOS goes to sleep when we close the lid of the MacBook"
+    echo "even when an external monitor and other accessories are connected."
+    echo "This utility uses pmset to disable sleeping."
+    echo ""
+    echo "WARNING: The user must enable sleeping at the end of a session."
+    echo "Otherwise the battery will drain when not in use."
+    echo ""
+    echo "Usage:   "
+    echo "   $CMD on         disable sleeping"
+    echo "   $CMD off        enable sleeping"
+    exit
+}
+
+CMD=${1}
+case "${CMD}" in
+    "help")
+        _show_help
+        ;;
+
+    "on")
+        _disable_sleep
+        ;;
+
+    "off")
+        _enable_sleep
+        ;;
+
+    "status")
+        _show_status
+        ;;
+
+    *)
+        _show_help
+        ;;
+esac
