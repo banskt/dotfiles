@@ -49,8 +49,9 @@ _enable_sleep() {
 
 _show_help() {
     CMD="$( basename ${BASH_SOURCE[0]} )"
-    echo "Prevents MacOS to go to sleep, so that a Macbook can be used in"
-    echo "clamshell mode without connecting the power adapter."
+    echo "A stimulant to keep the MacBook awake! Stronger than your coffee."
+    echo "It prevents MacOS to go to sleep so that a Macbook can be used"
+    echo "in clamshell mode without connecting the power adapter."
     echo ""
     echo "Note: My overlord Apple knows what we want better than we do."
     echo "MacOS goes to sleep when we close the lid of the MacBook"
@@ -63,6 +64,7 @@ _show_help() {
     echo "Usage:   "
     echo "   $CMD on         disable sleeping"
     echo "   $CMD off        enable sleeping"
+    echo "   $CMD status     show status (on/off) of the stimulant"
     exit
 }
 
