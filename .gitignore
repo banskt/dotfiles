@@ -2,3 +2,5 @@
 *.swp
 # do not push vim history
 vim/dotvim/.netrwhist
+# do not push nfs files by accident
+*\.nfs*
