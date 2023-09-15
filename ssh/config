@@ -1,14 +1,14 @@
-## default for all ##
-Host *
-    ForwardAgent no
-    ForwardX11 no
-    ForwardX11Trusted yes 
-    Protocol 2
-    ServerAliveInterval 60
-    ServerAliveCountMax 30
-    PasswordAuthentication yes 
-    PreferredAuthentications password,hostbased,publickey,keyboard-interactive
-
+# For each parameter, the first obtained value will be used. 
+# The configuration files contain sections separated by 
+# ''Host'' specifications, and that section is only applied 
+# for hosts that match one of the patterns given in the specification. 
+# The matched host name is the one given on the command line.
+#
+# -- SEQUENCE --
+# Since the first obtained value for each parameter is used, 
+# more host-specific declarations should be given near the 
+# beginning of the file, and general defaults at the end. 
+#
 Host nygc
     Hostname pe2-login
     User sbanerjee
@@ -112,6 +112,7 @@ Host sscluster2
 Host github.com
     HostName github.com
     User git
+    PreferredAuthentications publickey,password,hostbased,keyboard-interactive
     PubkeyAuthentication yes
     IdentityFile ~/.ssh/github_key
     IdentitiesOnly yes
@@ -121,6 +122,8 @@ Host vultr
     Hostname 80.240.31.248
     User saikat
     Port 44933
+    PreferredAuthentications publickey,password,hostbased,keyboard-interactive
+    PubkeyAuthentication yes
     IdentityFile ~/.ssh/vultr_key
     IdentitiesOnly yes
 
@@ -128,5 +131,19 @@ Host vultr
 Host feral
     Hostname aloadae.feralhosting.com
     User banskt
+    PreferredAuthentications publickey,password,hostbased,keyboard-interactive
+    PubkeyAuthentication yes
     IdentityFile ~/.ssh/feralhosting_key
     IdentitiesOnly yes
+
+## default for all ##
+Host *
+    ForwardAgent no
+    ForwardX11 no
+    ForwardX11Trusted yes 
+    Protocol 2
+    ServerAliveInterval 60
+    ServerAliveCountMax 30
+    PasswordAuthentication yes 
+    PreferredAuthentications password,hostbased,keyboard-interactive,publickey
+
