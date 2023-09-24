@@ -188,6 +188,113 @@ How to load rtorrent for non-interactive shells?
 ### Configuration and running
 
   - [Archlinux wiki](https://wiki.archlinux.org/title/RTorrent#Configuration)
+  - [List of all commands](https://rtorrent-docs.readthedocs.io/en/latest/genindex.html)
+  - [Autostarting rtorrent at boot time](https://rtorrent-docs.readthedocs.io/en/latest/cookbook.html#the-rtorrent-command-line)
+
+#### XMLRPC Setup
+
+Configure rTorrent to expose the endpoint to a local unix domain socket
+instead of address + port because
+[the later is less secure](https://github.com/rakshasa/rtorrent/wiki/RPC-Setup-XMLRPC).
+
+In the `nginx.conf`, include the `scgi` config:
+```nginx
+location /canbeanything {
+    include         /opt/nginx/conf/scgi_params;
+    scgi_pass       unix:/home/banskt/local/etc/rtorrent/session/rpc.socket;
+}
+```
+and in `rutorrent/conf/config.php` include:
+```php
+    $scgi_port = 0;
+    $scgi_host = "unix:///home/banskt/local/etc/rtorrent/session/rpc.socket";
+
+    // $XMLRPCMountPoint = "/RPC2";     // DO NOT DELETE THIS LINE!!! DO NOT COMMENT THIS LINE!!!
+    $XMLRPCMountPoint = "/canbeanything";
+```
+However, the `$XMLRPCMountPoint` had no effect.
+This was probably because rutorrent is using "rpc" and/or "httprpc" plugin
+[GitHub Issue](https://github.com/Novik/ruTorrent/issues/1895).
+Also [RPC Plugin is not recommended](https://github.com/Novik/ruTorrent/wiki/PluginRPC).
+Therefore, I disabled the RPC and HTTPRPC plugins in `conf/plugins.ini`.
+```ini
+[rpc]
+enabled = no
+
+[httprpc]
+enabled = no
+
+[_cloudflare]
+enabled = no
+```
+The `_cloudflare` plugin allows to scrape the DDOS protection from Cloudflare.
+It requires Python and `cloudscraper` module. 
+I do not have Python installed yet.
+After disabling RPC and HTTPRPC, the `$XMLRPCMountPoint` had the intended effect.
+
+Read more about plugins:
+
+  - [rutorrent plugins wiki](https://github.com/Novik/ruTorrent/wiki/Plugins).
+
+
+#### Open Port
+
+  - Specify a port in `~/.rtorrent.rc`. 
+  - Create `/etc/ufw/applications.d/rtorrent`.
+```ini
+[rTorrent]
+title=BitTorrent client
+description=rTorrent is a quick and efficient BitTorrent client written in C++.
+ports=xxx/tcp
+```
+  - Open the port
+```bash
+sudo ufw allow rTorrent
+sudo ufw status verbose
+```
+
+#### Authentication
+Configure access of the website using nginx 
+[Basic Authentication](https://docs.nginx.com/nginx/admin-guide/security-controls/configuring-http-basic-authentication/).
+This is not secure and should not be used in production environmnets.
+```bash
+sudo apt install apache2-utils
+sudo htpasswd -c /path/to/.htpasswd user1
+```
+
+Alternatively, encrypted password can also be generated using
+```bash
+openssl passwd -apr1 <password_string>
+```
+The generated \<encrypted\_password\_string\> can be stored in `.htpasswd`:
+```default
+user1:<encrypted_password_string>
+```
+
+Include the password in `nginx.conf`:
+```nginx
+location /rutorrent {
+    auth_basic user1;
+    auth_basic_user_file /path/to/.htpasswd;
+}
+```
+
+#### Supporting libraries
+
+  - mktorrent 
+
+  - ffmpeg
+
+**To-Do:** 
+  [ ] Use OpenID Connect / OAuth2
+  [ ] Enable cloudflare plugin after installing Python
+  [ ] Use mktor from pyrocore instead of mktorrent
+  [ ] Configure rutorrent `Create` plugin with mktorrent.
+  [ ] Disable rutorrent `Get` plugin because webserver user do not have access of media library. 
+
+FeralHosting `$XMLRPCMountPoint = '//rutorrent:@'.gethostname().'/'.$_pw['name'].'/RPC';`
+//rutorrent:@aloadae/banskt/RPC
+
 
 ## Mediainfo
 
@@ -202,3 +309,5 @@ sudo apt install libmms0
 sudo dpkg -i libmediainfo0v5_23.09-1_amd64.xUbuntu_22.04.deb
 sudo dpkg -i mediainfo_23.09-1_amd64.xUbuntu_22.04.deb
 ```
+
+## Pyrocore
