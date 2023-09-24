@@ -2,7 +2,26 @@
 
 ## rtorrent
 
-Helpful resources
+[rTorrent](https://rakshasa.github.io/rtorrent/) 
+is a quick and efficient BitTorrent client that uses, 
+and is in development alongside, the 
+[libTorrent](https://github.com/rakshasa/libtorrent) protocol.
+It is written in C++ and provides a terminal-based user interface 
+via the ncurses programming library. 
+When combined with a terminal multiplexer (e.g. GNU Screen or Tmux) 
+and Secure Shell, it becomes a convenient remote BitTorrent client.
+
+rTorrent has excellent scripting abilities, 
+albeit mostly undocumented unless you read the source.
+
+
+### Installation
+
+I installed `rTorrent` and its dependencies in a non-standard location.
+The installation configuration required correct path and library specifications,
+for which used the powerful `pkg-config` in Linux.
+
+Here are some resources which were helpful:
 
   - [Reddit wiki](https://www.reddit.com/r/seedboxes/wiki/guides/xmlrpc-c_libtorrent_rtorrent/)
   - [Reddit user discusses building and installing xmlrpc-c, libtorrent 
@@ -10,12 +29,10 @@ Helpful resources
   - [Auto install script for rtorrent with RuTorrent as 
   GUI](https://github.com/Kerwood/Rtorrent-Auto-Install)
 
-  **Installation PATH and FLAGS**
+**Installation PATH and FLAGS**
 
   - [What is `PKG_CONFIG_PATH` environment variable?](https://askubuntu.com/questions/210210/)
   - [Guide to pkg-config](https://people.freedesktop.org/~dbn/pkg-config-guide.html)
-
-### Installation
 
 Installation of rtorrent requires `xmlrpc-c` and `libtorrent`.
 Other library prerequisites are installed using `apt`.
@@ -74,10 +91,10 @@ and is somehow different from
 [libtorrent](https://libtorrent.org/).
 
 ```bash
+module load xmlrpc-c/1.59.01-stable openssl/3.1.3
 wget https://github.com/rakshasa/libtorrent/archive/refs/tags/v0.13.8.tar.gz
 tar zxf v0.13.8.tar.gz
 cd libtorrent-0.13.8/
-module load xmlrpc-c/1.59.01-stable openssl/3.1.3
 ./autogen.sh
 ./configure --prefix=/opt/libtorrent/0.13.8 --disable-debug --with-posix-fallocate
 make -j2
@@ -151,6 +168,7 @@ prepend-path	PKG_CONFIG_PATH		$prefix/lib/pkgconfig
 #### rtorrent
 
 ```
+module load libtorrent/0.13.8
 wget https://github.com/rakshasa/rtorrent-archive/raw/master/rtorrent-0.9.8.tar.gz --no-check-certificate
 tar zxf rtorrent-0.9.8.tar.gz
 cd rtorrent-0.9.8/
@@ -184,12 +202,46 @@ prepend-path    PATH			$prefix/bin
 
 How to load rtorrent for non-interactive shells?
 
+#### ruTorrent
+
+  - [Github repository](https://github.com/Novik/ruTorrent)
+  - [Github wiki](https://github.com/Novik/ruTorrent/wiki)
+
+ruTorrent is a web frontend for rtorrent. 
+It is a PHP project and does not require a running daemon.
+The idea is to keep the PHP project in the document root of a web server
+with XMLRPC calls to the running rtorrent daemon.
+
+In my setup, the web server is run by user `minion`
+and the rtorrent service is run by the default user, say `user1`.
+The user `minion` does not have root privileges.
+`minion` and `user1` are members of a common group called `minion`.
+
+```bash
+module load rtorrent/0.9.8
+cd /path/to/web/document/root
+git clone git@github.com:Novik/ruTorrent.git rutorrent
+sudo chgrp -R minion rutorrent
+```
+
+However running the frontend requires proper configuration and settings,
+as well as connection to the rtorrent scgi socket.
+
 
 ### Configuration and running
 
   - [Archlinux wiki](https://wiki.archlinux.org/title/RTorrent#Configuration)
   - [List of all commands](https://rtorrent-docs.readthedocs.io/en/latest/genindex.html)
   - [Autostarting rtorrent at boot time](https://rtorrent-docs.readthedocs.io/en/latest/cookbook.html#the-rtorrent-command-line)
+
+Here is a quick list of files which had to be configured:
+
+  - `nginx.conf` and the files included therein for my particular setup.
+  - `rutorrent/conf/config.php`
+  - `rutorrent/conf/plugins.ini`
+  - `rutorrent/php/settings.php` - Bug fix for PHP 8.2
+  - `rutorrent/plugins/cpuload/cpu.php` - Bug fix for PHP 8.2
+  - `~/.rtorrent.rc`
 
 #### XMLRPC Setup
 
@@ -223,14 +275,38 @@ enabled = no
 
 [httprpc]
 enabled = no
+```
+After disabling RPC and HTTPRPC, the `$XMLRPCMountPoint` had the intended effect.
 
+
+> FeralHosting uses a strang mount point.
+> `$XMLRPCMountPoint = '//rutorrent:@'.gethostname().'/'.$_pw['name'].'/RPC';`
+> => `//rutorrent:@aloadae/banskt/RPC`.
+> What is happening there?
+
+#### rutorrent plugins
+
+I disabled some other plugins for rutorrent.
+
+```ini
 [_cloudflare]
 enabled = no
 ```
 The `_cloudflare` plugin allows to scrape the DDOS protection from Cloudflare.
 It requires Python and `cloudscraper` module. 
 I do not have Python installed yet.
-After disabling RPC and HTTPRPC, the `$XMLRPCMountPoint` had the intended effect.
+
+```ini
+[spectrogram]
+enabled = no
+```
+Requires installing sox.
+
+```ini
+[screenshots]
+enabled = no
+```
+Requires installing ffmpeg. This is a cool feature and I will enable it if I install ffmpeg.
 
 Read more about plugins:
 
@@ -260,7 +336,9 @@ This is not secure and should not be used in production environmnets.
 ```bash
 sudo apt install apache2-utils
 sudo htpasswd -c /path/to/.htpasswd user1
+sudo apt purge apache2-utils
 ```
+I don't apache2-utils going forward.
 
 Alternatively, encrypted password can also be generated using
 ```bash
@@ -279,21 +357,62 @@ location /rutorrent {
 }
 ```
 
+#### rutorrent bug fix for PHP8.2
+
+I modified `rutorrent/php/settings.php` because 
+`rTorrentSettings::$modified` was not defined and was being
+created dynamically.
+[Dynamic properties are deprecated in
+PHP 8.2](https://wiki.php.net/rfc/deprecate_dynamic_properties).
+
+```bash
+$ git diff php/settings.php
+diff --git a/php/settings.php b/php/settings.php
+index ee3d6138..5d2f4a02 100644
+--- a/php/settings.php
++++ b/php/settings.php
+@@ -28,6 +28,7 @@ class rTorrentSettings
+        public $home = '';
+        public $tz = null;
+        public $ip = '0.0.0.0';
++    public $modified;
+
+        static private $theSettings = null;
+```
+
+And, here is the same modification for `plugins/cpuload/cpu.php`
+
+```bash
+$ git diff plugins/cpuload/cpu.php
+diff --git a/plugins/cpuload/cpu.php b/plugins/cpuload/cpu.php
+index 7aa4ff07..0a974cd4 100644
+--- a/plugins/cpuload/cpu.php
++++ b/plugins/cpuload/cpu.php
+@@ -7,6 +7,7 @@ class rCPU
+ {
+        public $hash = "cpu.dat";
+        public $count = 1;
++    public $modified;
+
+        static public function load()
+        {
+```
+
+
+
 #### Supporting libraries
 
   - mktorrent 
-
   - ffmpeg
 
 **To-Do:** 
-  [ ] Use OpenID Connect / OAuth2
-  [ ] Enable cloudflare plugin after installing Python
-  [ ] Use mktor from pyrocore instead of mktorrent
-  [ ] Configure rutorrent `Create` plugin with mktorrent.
-  [ ] Disable rutorrent `Get` plugin because webserver user do not have access of media library. 
 
-FeralHosting `$XMLRPCMountPoint = '//rutorrent:@'.gethostname().'/'.$_pw['name'].'/RPC';`
-//rutorrent:@aloadae/banskt/RPC
+  - [ ] Use OpenID Connect / OAuth2
+  - [ ] Enable cloudflare plugin after installing Python
+  - [ ] Use mktor from pyrocore instead of mktorrent
+  - [ ] Configure rutorrent `Create` plugin with mktorrent.
+  - [ ] Disable rutorrent `Get` plugin because webserver user do not have access of media library. 
+
 
 
 ## Mediainfo
@@ -311,3 +430,46 @@ sudo dpkg -i mediainfo_23.09-1_amd64.xUbuntu_22.04.deb
 ```
 
 ## Pyrocore
+
+## Test internet speed
+
+There are a few options to check the 
+[bandwidth speed from command line](https://superuser.com/q/70399)
+
+### iperf
+
+iperf is simple and easy to use.
+```bash
+sudo apt install iperf3
+```
+
+It requires a client and server.
+
+```default
+(on the server)
+
+ user@server$ sudo ufw allow <port>/tcp
+ user@server$ iperf3 -s -p <port>
+
+(on the client)
+
+ user@client$ iperf3 -c <server.domain> -p <port> -t 60
+
+Connecting to host <server.domain>, port <port>
+[  4] local 185.21.217.17 port 55648 connected to <server.domain> port <port>
+[ ID] Interval           Transfer     Bandwidth       Retr  Cwnd
+[  4]   0.00-1.00   sec  79.9 MBytes   670 Mbits/sec    1   2.99 MBytes       
+[  4]   1.00-2.00   sec  43.8 MBytes   367 Mbits/sec    0   4.33 MBytes       
+[  4]   2.00-3.00   sec  35.0 MBytes   294 Mbits/sec    0   3.70 MBytes       
+[  4]   3.00-4.00   sec  43.8 MBytes   367 Mbits/sec    0   5.38 MBytes       
+[  4]   4.00-5.00   sec  48.8 MBytes   409 Mbits/sec    5   4.96 MBytes      
+   .
+   .
+   .
+   .
+   .
+- - - - - - - - - - - - - - - - - - - - - - - - -
+[ ID] Interval           Transfer     Bandwidth       Retr
+[  4]   0.00-60.00  sec  2.63 GBytes   377 Mbits/sec    4             sender
+[  4]   0.00-60.00  sec  2.59 GBytes   371 Mbits/sec                  receiver
+```
