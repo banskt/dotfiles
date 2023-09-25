@@ -405,6 +405,31 @@ index 7aa4ff07..0a974cd4 100644
   - mktorrent 
   - ffmpeg
 
+#### systemd control
+
+  - Create a launcher script for starting rtorrent,
+  see `~/.dotfiles/bin/rtorrent-launcher`
+
+  - Create a systemd file in `/lib/systemd/system/rtorrent@.service`
+  and enable the service.
+```bash
+sudo systemctl enable rtorrent@banskt
+```
+The start/stop/restart can be controlled by `systemctl`.
+```bash
+sudo systemctl <start/stop/reload> rtorrent@banskt
+```
+There are several things to note here,
+in particular `Type=` (see
+[documentation](https://www.freedesktop.org/software/systemd/man/systemd.service.html)
+or in simple words, [this StackOverflow answer](https://superuser.com/a/1274913).
+Another important thing to consider is which kill signal is sent.
+SIGKILL is never safe.
+
+  - Check: If you kill the process using `rtorrent-launcher stop`,
+  is it recognized by `systemd`? Yes.
+
+
 **To-Do:** 
 
   - [ ] Use OpenID Connect / OAuth2
@@ -472,4 +497,11 @@ Connecting to host <server.domain>, port <port>
 [ ID] Interval           Transfer     Bandwidth       Retr
 [  4]   0.00-60.00  sec  2.63 GBytes   377 Mbits/sec    4             sender
 [  4]   0.00-60.00  sec  2.59 GBytes   371 Mbits/sec                  receiver
+```
+
+### Remove startup scripts
+
+```bash
+systemctl disable --now apt-daily{,-upgrade}.{timer,service}
+dpkg-reconfigure unattended-upgrades
 ```

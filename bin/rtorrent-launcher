@@ -36,14 +36,18 @@ _get_rtorrent_pid() {
     _is_rtorrent_running && echo $( cat ${RTORRENT_SESSION_DIR}/rtorrent.lock | awk -F: '{ print $2 }' | sed "s/[^0-9]//g" )
 }
 
+_get_screen_name() {
+    _is_screen_running && echo $( screen -ls | grep -E "[0-9]+.rtorrent[[:space:]]" | awk '{print $1}' )
+}
+
 
 _start_rtorrent_with_screen() {
     # Ctrl-s is often used for terminal control to stop screen output 
     # Ctrl-q is used to start it. 
     # These mappings may interfere with rTorrent. 
     # see https://wiki.archlinux.org/title/RTorrent#Key_bindings
-    stty stop undef
-    stty start undef
+    # [[ $- == *i* ]] && stty stop undef
+    # [[ $- == *i* ]] && stty start undef
     export CMDSTRING="${RTORRENT_COMMAND_PRE} rtorrent -n -o import=${RTORRENT_CONFIG_FILE} -i ${WAN_IP}"
     _is_debug && echo "Start Command: ${CMDSTRING}"
     # launch in a non-interactive shell
@@ -117,26 +121,28 @@ _do_info() {
     _do_status
     echo ""
 
-#    if _is_rtorrent_running; then
+    if _is_rtorrent_running; then
         PID=$( _get_rtorrent_pid )
         RSS=$( ps -p ${PID} --format rss | tail -n 1 | numfmt --from-unit=1024 --to=iec )
         PMEM=$( ps -p ${PID} --format pmem | tail -n 1 | sed s'/^\ \+//g')
-        NCONN=$( ss -npa | grep "rtorrent" | grep -v "rpc.socket" | grep -v "screen" | grep -v "${RTORRENT_PORT}" | wc -l )
-        #NCONN=$( netstat --ip -anp | grep -E "Proto|${DAEMON_NAME}" | wc -l )
-        # -a Show both listening and non-listening (for TCP this means established connections) sockets.
-        # -n Show numerical addresses instead of trying to determine symbolic host, port or user names. 
-        # -p Show the PID and name of the program to which each socket belongs. 
-        echo "--------------------------------------------------"
-        echo "- Screen name           : ${SCREEN_NAME}"
-        echo "- Process ID            : ${PID}"
-        echo "- Memory Usage          : ${RSS} (${PMEM}%)"
-        echo "- Active Connections    : ${NCONN}"
-        echo "- Config File           : ${RTORRENT_CONFIG_FILE}"
-        echo "- Session Directory     : ${RTORRENT_SESSION_DIR}"
-        echo "- XMLRPC socket file    : ${RTORRENT_SOCKET_FILE}"
-        echo "--------------------------------------------------"
-        echo ""
-#    fi
+        MEM_USAGE="${RSS} (${PMEM}%)"
+    fi
+    SCREEN_NAME_RUNNING=$( _get_screen_name )
+    NCONN=$( ss -npa | grep "rtorrent" | grep -v "rpc.socket" | grep -v "screen" | grep -v "${RTORRENT_PORT}" | wc -l )
+    #NCONN=$( netstat --ip -anp | grep -E "Proto|${DAEMON_NAME}" | wc -l )
+    # -a Show both listening and non-listening (for TCP this means established connections) sockets.
+    # -n Show numerical addresses instead of trying to determine symbolic host, port or user names. 
+    # -p Show the PID and name of the program to which each socket belongs. 
+    echo "--------------------------------------------------"
+    echo "- Screen name           : ${SCREEN_NAME_RUNNING}"
+    echo "- Process ID            : ${PID}"
+    echo "- Memory Usage          : ${MEM_USAGE}"
+    echo "- Active Connections    : ${NCONN}"
+    echo "- Config File           : ${RTORRENT_CONFIG_FILE}"
+    echo "- Session Directory     : ${RTORRENT_SESSION_DIR}"
+    echo "- XMLRPC socket file    : ${RTORRENT_SOCKET_FILE}"
+    echo "--------------------------------------------------"
+    echo ""
 }
 
 _do_help() {
