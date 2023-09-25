@@ -1,0 +1,225 @@
+#!/usr/bin/env bash
+### BEGIN INIT INFO
+# Provides:          rtorrent-launcher
+# Required-Start:    $local_fs $remote_fs $network
+# Required-Stop:     $local_fs $remote_fs $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: rTorrent Launcher
+### END INIT INFO
+
+SCREEN_NAME="rtorrent"
+RTORRENT_COMMAND_PRE="source /opt/modules/init/bash; module load rtorrent/0.9.8;"
+RTORRENT_CONFIG_FILE="/home/banskt/.rtorrent.rc"
+RTORRENT_SESSION_DIR="/home/banskt/local/etc/rtorrent/session"
+RTORRENT_SOCKET_FILE="${RTORRENT_SESSION_DIR}/rpc.socket"
+RTORRENT_PORT="55927"
+
+
+_set_wan_ip() {
+    # see explanation: https://unix.stackexchange.com/q/335371
+    export WAN_IP=$( dig +short ANY @resolver1.opendns.com myip.opendns.com )
+}
+
+
+_is_screen_running() {
+    screen -ls | grep -qE "[0-9]+\.rtorrent[[:space:]]" && return 0 || return 1
+}
+
+
+_is_rtorrent_running() {
+   [[ -s "${RTORRENT_SESSION_DIR}/rtorrent.lock" ]] && return 0 || return 1
+}
+
+
+_get_rtorrent_pid() {
+    _is_rtorrent_running && echo $( cat ${RTORRENT_SESSION_DIR}/rtorrent.lock | awk -F: '{ print $2 }' | sed "s/[^0-9]//g" )
+}
+
+
+_start_rtorrent_with_screen() {
+    # Ctrl-s is often used for terminal control to stop screen output 
+    # Ctrl-q is used to start it. 
+    # These mappings may interfere with rTorrent. 
+    # see https://wiki.archlinux.org/title/RTorrent#Key_bindings
+    stty stop undef
+    stty start undef
+    export CMDSTRING="${RTORRENT_COMMAND_PRE} rtorrent -n -o import=${RTORRENT_CONFIG_FILE} -i ${WAN_IP}"
+    _is_debug && echo "Start Command: ${CMDSTRING}"
+    # launch in a non-interactive shell
+    # this will close screen when the process ends.
+    screen -dmS ${SCREEN_NAME} /bin/bash -c "${CMDSTRING}"
+    # launch in an interactive shell
+    # this will keep screen alive when the process ends.
+    #screen -dmS ${SCREEN_NAME} /bin/bash
+    #screen -S ${SCREEN_NAME} -p 0 -X stuff "${CMDSTRING}"
+}
+
+
+_do_start() {
+    if ! _is_screen_running && ! _is_rtorrent_running; then
+        _is_verbose && echo "Starting rTorrent."
+        _start_rtorrent_with_screen
+    else
+        _is_rtorrent_running && _is_verbose && echo "rTorrent is already running."
+        ! _is_rtorrent_running && _is_screen_runinng \
+            && echo "No rTorrent daemon found, but screen \"${SCREEN_NAME}\" is already running."
+    fi
+}
+
+
+_do_stop() {
+    if _is_rtorrent_running; then 
+        _is_verbose && echo "Stopping rTorrent."
+        PID=$( _get_rtorrent_pid )
+        _is_debug && echo "Stop ${PID}"
+        # kill -l lists all kill terms
+        # use SIGTERM (15) to terminate gracefully.
+        _is_verbose && echo "Send kill signal"
+        kill -s 15 ${PID} 
+        #timeout -k 2s 20s kill -s 15 ${PID}
+        #_is_rtorrent_running && kill -s 9 ${PID}
+        #sleep 2
+    else
+        _is_verbose && echo "rTorrent is not running."
+    fi
+    #while :
+    for run in {1..10}; do
+        if ! _is_rtorrent_running; then
+            break
+        fi
+        _is_verbose && echo "Waiting for rTorrent to stop ..."
+        sleep 2
+    done
+    # send signal 9 (SIGKILL) if signal 15 (SIGTERM) did not work.
+    _is_rtorrent_running && kill -9 ${PID}
+    # screen must have already stopped but it is good to check.
+    if _is_screen_running; then
+        _is_verbose && echo "Stop screen ${SCREEN_NAME}"
+        screen -r ${SCREEN_NAME} -X quit
+    fi
+}
+
+_do_restart() {
+    _do_stop
+    _do_start
+}
+
+_do_status() {
+    _is_screen_running && echo "Screen: Running" || echo "Screen: Not found "
+    _is_rtorrent_running && echo "rTorrent: Running" || echo "rTorrent: Not found"
+}
+
+_do_info() {
+
+    echo "Welcome to rTorrent Launcher."
+    echo ""
+    _do_status
+    echo ""
+
+#    if _is_rtorrent_running; then
+        PID=$( _get_rtorrent_pid )
+        RSS=$( ps -p ${PID} --format rss | tail -n 1 | numfmt --from-unit=1024 --to=iec )
+        PMEM=$( ps -p ${PID} --format pmem | tail -n 1 | sed s'/^\ \+//g')
+        NCONN=$( ss -npa | grep "rtorrent" | grep -v "rpc.socket" | grep -v "screen" | grep -v "${RTORRENT_PORT}" | wc -l )
+        #NCONN=$( netstat --ip -anp | grep -E "Proto|${DAEMON_NAME}" | wc -l )
+        # -a Show both listening and non-listening (for TCP this means established connections) sockets.
+        # -n Show numerical addresses instead of trying to determine symbolic host, port or user names. 
+        # -p Show the PID and name of the program to which each socket belongs. 
+        echo "--------------------------------------------------"
+        echo "- Screen name           : ${SCREEN_NAME}"
+        echo "- Process ID            : ${PID}"
+        echo "- Memory Usage          : ${RSS} (${PMEM}%)"
+        echo "- Active Connections    : ${NCONN}"
+        echo "- Config File           : ${RTORRENT_CONFIG_FILE}"
+        echo "- Session Directory     : ${RTORRENT_SESSION_DIR}"
+        echo "- XMLRPC socket file    : ${RTORRENT_SOCKET_FILE}"
+        echo "--------------------------------------------------"
+        echo ""
+#    fi
+}
+
+_do_help() {
+    echo "Show help"
+}
+
+_set_flags_to_zero() {
+    export START=0
+    export STOP=0
+    export RESTART=0
+    export STATUS=0
+    export INFO=0
+    export HELP=0
+    export UNKNOWN=0
+}
+
+_is_debug() { 
+    [[ "$DEBUG_FLAG" == 1 ]]   || return 1 
+}
+
+_is_verbose() { 
+    [[ "$VERBOSE_FLAG" == 1 ]] || return 1 
+}
+
+RES=0
+DEBUG_FLAG=0
+VERBOSE_FLAG=0
+_set_flags_to_zero
+
+while [[ $# -gt 0 ]]; do
+    key=${1}
+    case ${key} in
+        "-c" | "--config")
+            CFG_FILE="${2}"
+            shift
+            shift;;
+        "-d" | "--debug")
+            DEBUG_FLAG=1
+            shift;;
+        "-v" | "--verbose")
+            VERBOSE_FLAG=1
+            shift;;
+        "start")
+            START=1
+            shift;;
+        "stop")
+            STOP=1
+            shift;;
+        "restart")
+            RESTART=1
+            shift;;
+        "status")
+            STATUS=1
+            shift;;
+        "info")
+            INFO=1
+            shift;;
+        "help")
+            HELP=1
+            shift;;
+        *)
+            UNKNOWN=1
+            shift;;
+    esac
+done
+
+# check that command arguments have only one option specified
+FLAGNUM=$(( $START + $STOP + $RESTART + $STATUS + $INFO + $HELP + $UNKNOWN ))
+
+_is_debug && echo START=$START STOP=$STOP RESTART=$RESTART STATUS=$STATUS INFO=$INFO HELP=$HELP UNKNOWN=$UNKNOWN CFGFILE=$CFG_FILE
+[[ ${FLAGNUM} -ne 1 ]] && echo -e "Wrong arguments in command. See help.\n" && _set_flags_to_zero && HELP=1
+_is_debug && echo START=$START STOP=$STOP RESTART=$RESTART STATUS=$STATUS INFO=$INFO HELP=$HELP UNKNOWN=$UNKNOWN CFGFILE=$CFG_FILE
+
+_set_wan_ip 
+_is_debug && echo "My IP is $WAN_IP"
+
+# Perform the action specified in the command
+# _is_verbose && echo "Welcome to rTorrent Launcher."
+[[ "$START" == 1 ]]   && _do_start
+[[ "$STOP" == 1 ]]    && _do_stop
+[[ "$RESTART" == 1 ]] && _do_restart
+[[ "$STATUS" == 1 ]]  && _do_status
+[[ "$INFO" == 1 ]]    && _do_info
+[[ "$HELP" == 1 ]]    && _do_help
+[[ "$UNKNOWN" == 1 ]] && _do_help
+exit ${RES}
