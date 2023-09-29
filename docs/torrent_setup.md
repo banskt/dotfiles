@@ -456,6 +456,20 @@ sudo dpkg -i mediainfo_23.09-1_amd64.xUbuntu_22.04.deb
 
 ## Pyrocore
 
+**Note:** Requires Python 2
+```
+git clone git@github.com:pyroscope/pyrocore.git ~/local/apps/pyroscope/pyrocore
+micromamba activate py27
+```
+
+Since I am using micromamba I have to guide virtualenv to the correct library paths.
+I had to include some extra lines in the installation / update file. 
+I removed all the checks and sums, and created a new `install-banskt.sh` file for installation
+and install using,
+```
+~/local/apps/pyroscope/pyrocore/install-banskt.sh
+```
+
 ## Test internet speed
 
 There are a few options to check the 
@@ -504,4 +518,22 @@ Connecting to host <server.domain>, port <port>
 ```bash
 systemctl disable --now apt-daily{,-upgrade}.{timer,service}
 dpkg-reconfigure unattended-upgrades
+```
+
+## Python / Micromamba
+```
+curl -JLO https://micro.mamba.pm/api/micromamba/linux-64/latest
+tar xjvf micromamba-1.5.1-0.tar.bz2
+bin/micromamba shell init -s bash -p ~/local/micromamba
+```
+Move mamba initialize script to `~/.custom_dotfiles/bashrc`.
+Source the bashrc.
+```
+micromamba create -n py311 python=3.11 -c conda-forge
+micromamba config append channels conda-forge
+micromamba activate py311
+micromamba deactivate
+# Pyrocore runs on python 2
+micromamba create -n py27 python=2.7 -c conda-forge
+micromamba activate py27
 ```
