@@ -79,8 +79,9 @@ _do_stop() {
         _is_debug && echo "Stop ${PID}"
         # kill -l lists all kill terms
         # use SIGTERM (15) to terminate gracefully.
+        # - wiki says SIGINT(2) for normal shutdown
         _is_verbose && echo "Send kill signal"
-        kill -s 15 ${PID} 
+        kill -s 2 ${PID} 
         #timeout -k 2s 20s kill -s 15 ${PID}
         #_is_rtorrent_running && kill -s 9 ${PID}
         #sleep 2
@@ -88,12 +89,12 @@ _do_stop() {
         _is_verbose && echo "rTorrent is not running."
     fi
     #while :
-    for run in {1..10}; do
+    for run in {1..5}; do
         if ! _is_rtorrent_running; then
             break
         fi
         _is_verbose && echo "Waiting for rTorrent to stop ..."
-        sleep 2
+        sleep 3
     done
     # send signal 9 (SIGKILL) if signal 15 (SIGTERM) did not work.
     _is_rtorrent_running && kill -9 ${PID}
