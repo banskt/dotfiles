@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+SOURCE="${1}"
+TARGET="${2}"
+ASHWINI_BASEDIR="/home/banskt/data/media.library"
+
+rsync -avz --ignore-existing --progress ${TARGET} ashwini:${ASHWINI_BASEDIR}/${TARGET}

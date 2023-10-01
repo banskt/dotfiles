@@ -457,7 +457,7 @@ sudo dpkg -i mediainfo_23.09-1_amd64.xUbuntu_22.04.deb
 ## Pyrocore
 
 **Note:** Requires Python 2
-```
+```bash
 git clone git@github.com:pyroscope/pyrocore.git ~/local/apps/pyroscope/pyrocore
 micromamba activate py27
 ```
@@ -466,8 +466,27 @@ Since I am using micromamba I have to guide virtualenv to the correct library pa
 I had to include some extra lines in the installation / update file. 
 I removed all the checks and sums, and created a new `install-banskt.sh` file for installation
 and install using,
-```
+```bash
 ~/local/apps/pyroscope/pyrocore/install-banskt.sh
+```
+
+Install default configuration
+```bash
+pyroadmin --create-config
+```
+And setup the XMLRPC connection. 
+Provide the socket path (from `~/.rtorrent.rc`) in `.pyrocore/config.ini`:
+```ini
+# XMLRPC connection
+scgi_url = scgi://$HOME/path/to/rpc.socket
+```
+
+And import path to bashrc
+```bash
+# Pyrocore
+export LD_LIBRARY_PATH="${HOME}/usr/micromamba/envs/py27/lib:${LD_LIBRARY_PATH}"
+export PATH="${HOME}/usr/apps/pyrocore/bin:${PATH}"
+source ${HOME}/.pyroscope/bash-completion
 ```
 
 ## Test internet speed

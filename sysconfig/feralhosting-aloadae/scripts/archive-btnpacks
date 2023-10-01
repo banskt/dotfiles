@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+SOURCE="${1}"
+ASHWINI_BASEDIR="/home/banskt/data/media.library/btn-packs"
+rsync -avz --ignore-existing --progress ${SOURCE} ashwini:${ASHWINI_BASEDIR}/

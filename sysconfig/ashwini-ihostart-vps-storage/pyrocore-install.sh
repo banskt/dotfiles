@@ -5,7 +5,7 @@ source ~/.bashrc
 micromamba activate py27
 PYTHON=$( which python )
 LDPATH=$( micromamba info | grep "env location" | cut -d":" -f2 | tr -d [:space:] )
-export LD_LIBRARY_PATH=${LDPATH}:${LD_LIBRARY_PATH}
+export LD_LIBRARY_PATH=${LDPATH}/lib:${LD_LIBRARY_PATH}
 
 set -e
 PROJECT_ROOT="$(command cd $(dirname "$0") >/dev/null && pwd)"
