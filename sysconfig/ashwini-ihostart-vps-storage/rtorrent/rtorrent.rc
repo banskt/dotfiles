@@ -79,7 +79,7 @@ system.umask.set = 0027
 system.cwd.set = (directory.default)
 network.http.dns_cache_timeout.set = 25
 schedule2 = monitor_diskspace, 15, 60, ((close_low_diskspace, 1000M))
-#pieces.hash.on_completion.set = no
+pieces.hash.on_completion.set = no
 #view.sort_current = seeding, greater=d.ratio=
 #keys.layout.set = qwerty
 #network.http.capath.set = "/etc/ssl/certs"
@@ -137,6 +137,6 @@ method.insert = cfg.dldir_btnpack, private|const|string, (cat, (cfg.download), "
 schedule2 = autodl_btnpack, 30, 30,\
     ((load.start_verbose, (cat, (cfg.watch_btnpack), "*.torrent"),\
         (cat, "d.directory.set=", (cfg.dldir_btnpack)),\
-        "d.custom1.set=BTN-Pack"))
+        "d.custom1.set=BTNPack"))
 
 ### END of rtorrent.rc ###
