@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+LOGFILE="/media/sdt/banskt/usr/apps/btn-automagic/data/update.log"
+source /media/sdt/banskt/.bashrc
+micromamba activate py311
+sleep 2
+python usr/apps/btn-automagic/fetch-btn-feed.py 2>&1 > ${LOGFILE}
+exitcode="$?"
+[[ "${exitcode}" == 0 ]] && echo "btnfeed: $( date ) | Update successful" || echo "btnfeed: $( date ) | ERROR"
+exit ${exitcode}

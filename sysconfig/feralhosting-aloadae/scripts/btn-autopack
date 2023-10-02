@@ -1,0 +1,311 @@
+#!/usr/bin/env bash
+
+if [[ -f ${HOME}/btn-autopack.cfg ]]; then
+    source ${HOME}/btn-autopack.cfg
+else
+    echo "Configuration file ${HOME}/btn-autopack.cfg not found. Exiting."
+    exit 1
+fi
+
+_do_endscript() {
+    echo "FAILED."
+    exit 1
+}
+
+
+_is_debug() {
+    [[ "$DEBUG_FLAG" == 1 ]]   || return 1
+}
+
+
+_is_verbose() {
+    [[ "$VERBOSE_FLAG" == 1 ]] || return 1
+}
+
+
+_is_metafile_ok() {
+    if [[ -f "${1}" ]]; then
+        lstor -qo __hash__ "${1}" | grep -q -v "Error" || return 1
+    else
+        return 1
+    fi  
+}
+
+
+_has_array_value() {
+	local needle="$1"   # Save first argument in a variable
+	shift               # Shift all arguments to the left (original $1 gets lost)
+	local haystack=("$@") # Rebuild the array with rest of arguments
+	for value in "${haystack[@]}"; do
+		if [[ "$value" == "$needle" ]]; then
+			return 0
+		fi
+	done
+	return 1
+}
+
+
+_get_chunk_size() {
+    fsize_arr=()
+    for fsize in $( du -sh ${1}/* | cut -f1 | numfmt --from=iec ); do  
+        fsize_arr+=( $fsize )
+    done
+    min=${fsize_arr[0]}
+    for i in ${fsize_arr[@]}; do  
+        (( i < min )) && min=$i
+    done
+}
+
+
+_get_torrent_url_from_id() {
+    echo "${BTN_SITEURL}/torrents.php?action=download&id=${1}&authkey=${BTN_AUTHKEY}&torrent_pass=${BTN_TORRENTPASS}"
+}
+
+
+_download_metafile() {
+    _is_debug && echo "Download metafile: ${1}"
+    METAFILE="${BTN_METAFILE_DIR}/${1}.torrent"
+    TORRENT_URL=$( _get_torrent_url_from_id "${1}" )
+    if [[ -f ${METAFILE} ]]; then
+        _is_verbose && echo "${METAFILE} exists."
+        _is_metafile_ok ${METAFILE} || ( echo "Error in metafile. Removing." && rm -f ${METAFILE} )
+    fi  
+    if [[ ! -f ${METAFILE} ]]; then
+        _is_verbose && echo "Download metafile from: "
+        _is_verbose && echo "    ${TORRENT_URL}"
+        if _is_verbose; then
+            curl -JL ${TORRENT_URL} -o ${METAFILE}
+        else
+            curl -JL ${TORRENT_URL} -o ${METAFILE} --silent
+        fi
+    fi
+    _is_metafile_ok ${METAFILE} || return 1
+}
+
+
+_cleanup_metafile() {
+	METAFILE="${BTN_METAFILE_DIR}/${1}.torrent"
+	[[ -d "${BTN_METAFILE_STORE}" ]] || mkdir -p "${BTN_METAFILE_STORE}"
+    mv "${METAFILE}" "${BTN_METAFILE_STORE}/${1}.torrent"
+}
+
+
+_is_download_complete() {
+    METAFILE="${BTN_METAFILE_DIR}/${1}.torrent"
+    __metahash__="$( lstor -qo __hash__ "${METAFILE}" )"
+    __comphash__="$( rtcontrol -qo "%(hash)s" is_complete=y hash=${__metahash__} )"
+    _is_verbose && echo "Check for ${__metahash__} of $( lstor -qo info.name "${METAFILE}" )"
+    _is_verbose && echo "    Found: ${__comphash__}"
+    [[ "${__metahash__}" == "${__comphash__}" ]] || return 1
+}
+
+
+#         x < 50MB  : 32kB 
+# 50MB  < x < 150MB : 64kB
+# 150MB < x < 350MB : 128kB
+# 350MB < x < 512MB : 256kB
+# 512MB < x < 1GB   : 512kB
+# 1GB   < x < 2GB   : 1024kB
+# 2GB   < x < 20GB  : 2048kB
+# 20GB  < x         : 4096kB
+# 
+# Chunk size higher than 4MB is known to cause issues with rTorrent. 
+# 
+_get_chunk_size() {
+
+    fsize_arr=()
+    if [[ -f ${1} ]]; then
+        fsize=$( du -sh ${1} | cut -f1 | numfmt --from=iec )
+        fsize_arr+=( "${fsize}" )
+    else
+        for f in $( ls -1 ${1}/ ); do
+            fsize=$( du -sh ${1}/${f} | cut -f1 | numfmt --from=iec )
+            fsize_arr+=( "${fsize}" )
+        done
+    fi  
+
+    min_fsize=${fsize_arr[0]}
+    for i in ${fsize_arr[@]}; do
+        [[ ${i} -lt ${min_fsize} ]] && min_fsize=${i}
+    done
+    min_fsize_readable=$( echo ${min_fsize} | numfmt --to=iec )
+
+    # convert filesize to MB
+    fsize=$( echo "${min_fsize}" | awk ' {$1/=1048576; printf "%0.2f",$1} ' | cut -d'.' -f1)
+
+    chunk_size="1024K"
+    if [[ "${fsize}" -lt 50 ]]; then
+        chunk_size="32K"
+    elif [[ "${fsize}" -lt 150 ]]; then
+        chunk_size="64K"
+    elif [[ "${fsize}" -lt 350 ]]; then
+        chunk_size="128K"
+    elif [[ "${fsize}" -lt 512 ]]; then
+        chunk_size="256K"
+    elif [[ "${fsize}" -lt 1024 ]]; then
+        chunk_size="512K"
+    elif [[ "${fsize}" -lt 2048 ]]; then
+        chunk_size="1024K"
+    elif [[ "${fsize}" -lt 20480 ]]; then
+        chunk_size="2048K"
+    else
+        chunk_size="4096K"
+    fi  
+
+    echo ${chunk_size}
+}
+
+
+_show_help() {
+    exitcode=${1}
+    if [[ ! -z "${2}" ]]; then
+        echo "Error: ${2}"
+        echo ""
+    fi
+    echo "btn-autopack: Download and automatically pack seasons from BTN."
+    echo "Usage:"
+    echo "    btn-autopack [OPTIONS] -b <id1> <id2> ... -r <release_name> -d <directory_name>"
+    echo "Flags:"
+    echo "    -b | --btnid      list of torrent IDs from BTN"
+    echo "    -r | --release    release name following BTN convention"
+    echo "Options:"
+    echo "    -d | --dir        name of the directory where episodes will be kept"
+    echo "    -h | --help       show this help and exit"
+    echo "    -v | --verbose    show detailed information"
+    echo ""
+    [[ $exitcode == 0 ]] && exit 0 || exit 1
+}
+
+
+VERBOSE_FLAG=1
+BTNID_ARRAY=()
+DEBUG_FLAG=1
+while [[ $# -gt 0 ]]; do
+    key=${1}
+    _is_debug && echo "Current key = ${1}"
+    _is_debug && echo "Next key = ${2}"
+    case ${key} in
+        "-b" | "--btnid")
+            while [[ ! -z "${2}" && "${2}" != "-"* ]]; do
+                _is_debug && echo "  Key is ${2}. Grab!"
+                BTNID_ARRAY+=( "${2}" )
+                shift
+            done
+            shift;;
+        "-r" | "--release")
+            RELEASENAME=${2}
+            shift
+            shift;;
+        "-d" | "--dir")
+            PACKDIR=${2}
+            shift
+            shift;;
+        "-v" | "--verbose")
+            VERBOSE_FLAG=1
+            shift;;
+        "--debug")
+            DEBUG_FLAG=1
+            shift;;
+        "-h" | "--help")
+            _show_help 0;
+            shift;;
+        *)
+            _show_help 1 "Wrong command"
+            UNKNOWN=1
+            shift;;
+    esac
+done
+
+_is_debug && echo ${RELEASENAME}
+
+[[ ! -z "${RELEASENAME}" ]] || _show_help 1 "Please provide a release name"
+[[ "${#BTNID_ARRAY[@]}" -gt 1 ]] || _show_help 1 "Please provide more than one torrent IDs"
+
+if [[ -z "${PACKDIR}" ]]; then
+    echo "Using release name as directory"
+    PACKDIR="${RELEASENAME}"
+fi
+
+if [[ -z "${BTN_METAFILE_STORE}" ]]; then
+	BTN_METAFILE_STORE="${BTN_METAFILE_DIR}/loaded"
+    [[ -d ${BTN_METAFILE_STORE} ]] || mkdir -p ${BTN_METAFILE_STORE}
+fi
+
+echo ""
+echo "------------------------------"
+echo "Release Name: ${RELEASENAME}"
+echo "Target Directory: ${PACKDIR}"
+echo "Number of episodes: ${#BTNID_ARRAY[@]}"
+echo "BTN Torrent IDs: ${BTNID_ARRAY[@]}"
+echo "------------------------------"
+echo " "
+
+# Download the torrents from BTN and put them in watch directory
+# This will automatically start the download
+echo "Downloading meta files from BTN."
+for btnid in ${BTNID_ARRAY[@]}; do
+    _is_debug && echo "BTN Torrent ID: ${btnid}"
+    _download_metafile ${btnid} || _do_endscript
+done
+
+# Create the requested directory
+[[ -d "${BTN_PACKBASE_DIR}/${PACKDIR}" ]] || mkdir -p "${BTN_PACKBASE_DIR}/${PACKDIR}"
+
+# Watch the episode download directory and symlink when 
+# download completes
+#_all_downloads_complete() {
+#    COMPLETE_FLAG=1
+#    for btnid in ${BTNID_ARRAY[@]}; do
+#        _is_download_complete ${btnid} || COMPLETE_FLAG=0
+#    done
+#    [[ "${COMPLETE_FLAG}" == 1 ]] || return 1
+#}
+
+#until _all_downloads_complete
+COMPLETED_ARRAY=()
+for btnid in ${BTNID_ARRAY[@]}; do
+    _has_array_value "${btnid}" "${COMPLETED_ARRAY[@]}" || _is_download_complete "${btnid}" && COMPLETED_ARRAY+=( "${btnid}"  )
+done
+
+_is_debug && echo "Number of complete torrents: ${#COMPLETED_ARRAY[@]}"
+_is_debug && echo "Complete torrents: ${COMPLETED_ARRAY[@]}"
+
+until [[ "${#BTNID_ARRAY[@]}" == "${#COMPLETED_ARRAY[@]}" ]]
+do
+    echo "Download completed for: ${COMPLETED_ARRAY[@]}"
+    echo "Waiting for other downloads to complete ..."
+    sleep 30
+	#--- update after sleeping --
+	for btnid in ${BTNID_ARRAY[@]}; do
+        _is_debug && echo "Check ${btnid} in ${COMPLETED_ARRAY[@]} | if not present call rtorrent"
+		_has_array_value "${btnid}" "${COMPLETED_ARRAY[@]}" || _is_download_complete "${btnid}" && COMPLETED_ARRAY+=( "${btnid}"  )
+	done
+done
+echo "All downloads are complete."
+
+echo "Link downloaded files to new upload directory."
+for btnid in ${BTNID_ARRAY[@]}; do
+    episode_filename=$( lstor -qo info.name "${BTN_METAFILE_DIR}/${btnid}.torrent" )
+    sourcefile="${BTN_EPISODE_DIR}/${episode_filename}"
+    targetfile="${BTN_PACKBASE_DIR}/${PACKDIR}/${episode_filename}"
+    [[ -f "${targetfile}" ]] || ln "${sourcefile}" "${targetfile}" || _do_endscript
+done
+
+echo "Creating new torrent file."
+CHUNK_SIZE=$( _get_chunk_size ${BTN_PACKBASE_DIR}/${PACKDIR} )
+echo "Calculated chunk size: ${CHUNK_SIZE}"
+MKTORRENT_CMD="mktor --private --comment=BTN -o ${BTN_PACKBASE_DIR}/${RELEASENAME}.torrent --chunk-min=${CHUNK_SIZE} --chunk-max=${CHUNK_SIZE}"
+[[ -f ${BTN_PACKBASE_DIR}/${RELEASENAME}.torrent ]] && rm -f ${BTN_PACKBASE_DIR}/${RELEASENAME}.torrent
+if _is_verbose; then
+    ${MKTORRENT_CMD} -v ${BTN_PACKBASE_DIR}/${PACKDIR} ${BTN_ANNOUNCE} || _do_endscript
+else
+    ${MKTORRENT_CMD} -q ${BTN_PACKBASE_DIR}/${PACKDIR} ${BTN_ANNOUNCE} || _do_endscript
+fi
+
+echo "Cleaning up metafiles."
+for btnid in ${BTNID_ARRAY[@]}; do
+	_cleanup_metafile ${btnid} || _do_endscript
+done
+
+echo "SUCCESS"
+exit 0
