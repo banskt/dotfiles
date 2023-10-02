@@ -264,7 +264,9 @@ done
 #until _all_downloads_complete
 COMPLETED_ARRAY=()
 for btnid in ${BTNID_ARRAY[@]}; do
-    _has_array_value "${btnid}" "${COMPLETED_ARRAY[@]}" || _is_download_complete "${btnid}" && COMPLETED_ARRAY+=( "${btnid}"  )
+    if ! _has_array_value "${btnid}" "${COMPLETED_ARRAY[@]}"; then
+        _is_download_complete "${btnid}" && COMPLETED_ARRAY+=( "${btnid}"  )
+    fi
 done
 
 _is_debug && echo "Number of complete torrents: ${#COMPLETED_ARRAY[@]}"
@@ -278,7 +280,9 @@ do
 	#--- update after sleeping --
 	for btnid in ${BTNID_ARRAY[@]}; do
         _is_debug && echo "Check ${btnid} in ${COMPLETED_ARRAY[@]} | if not present call rtorrent"
-		_has_array_value "${btnid}" "${COMPLETED_ARRAY[@]}" || _is_download_complete "${btnid}" && COMPLETED_ARRAY+=( "${btnid}"  )
+        if ! _has_array_value "${btnid}" "${COMPLETED_ARRAY[@]}"; then
+            _is_download_complete "${btnid}" && COMPLETED_ARRAY+=( "${btnid}"  )
+        fi
 	done
 done
 echo "All downloads are complete."
