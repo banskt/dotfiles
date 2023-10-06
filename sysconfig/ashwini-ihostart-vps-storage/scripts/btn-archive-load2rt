@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+METADIR="${HOME}/data/downloads/torrents/btn-archive"
+DATADIR="${HOME}/data/media.library/btn-archive"
+PACKNAME="${1}"
+VERBOSE_FLAG=1
+
+function _is_verbose() {
+    [[ "$VERBOSE_FLAG" == 1 ]] || return 1
+}
+
+
+function _vlog() {
+    { _is_verbose && echo "${@}"; } || return 0
+}
+
+## Load a torrent with a specified download directory, 
+## priority 2 (normal), and rutorrent tag 'BTNarXiv'
+## 
+## Usage:
+##     _load_to_rtorrent /path/to/metafile /path/to/datadir
+## 
+## All XMLPPC commands (with a few exceptions like system.listMethods) 
+## take an info hash as the first argument when called over the API,
+## to uniquely identify the target object. 
+## 'Target' is also the term used for that first parameter 
+## in error messages like Unsupported target type found, 
+## and that message is the one you’ll most likely get 
+## if you forgot to provide one.
+## Commands that do not target a specific item still need to have one 
+## (in newer versions of rTorrent), so provide an empty string 
+## as a placeholder in those cases.
+## Read how to configure targets: 
+##     https://github.com/rakshasa/rtorrent/wiki/RPC-Utility-XMLRPC2SCGI
+##
+## There is no comprehensive documentation for rtorrent,
+## To get started look at the list of all commands:
+##     https://github.com/rakshasa/rtorrent/wiki/rTorrent-0.9-Comprehensive-Command-list-(WIP)
+##     https://rtorrent-docs.readthedocs.io/en/latest/genindex.html
+##
+function _load_to_rtorrent() {
+    local metapath="${1}"
+    local datapath="${2}"
+    local fastpath="${metapath%.torrent}.chtor_fastresume.torrent"
+    # do not change the original torrent file
+    [[ -f ${fastpath} ]] || cp ${metapath} ${fastpath}
+    # add fast resume information
+    if ( chtor -q --fast-resume="${datapath}" "${fastpath}" ); then
+        _vlog "$( basename ${datapath} ) | Added fast resume information. Loading torrent..."
+
+        rt_datapath="$( dirname "${datapath}" )"
+        _vlog "$( basename ${datapath} ) | Path: ${rt_datapath}"
+        # rtorrent requires parent directory
+        if ( rtxmlrpc -q load.start_verbose '' "${fastpath}" \
+                            "d.directory.set=\"${rt_datapath}\"" \
+                            "d.custom1.set=BTNarXiv" \
+                            "d.priority.set=2" ); then
+            _vlog "Loaded torrent successfully."
+        else
+            _vlog "Failed to load torrent."
+        fi
+    else
+        _vlog "$( basename ${datapath} ) | Failed to add fast resume information."
+    fi
+}
+
+# find all torrent files in a given path
+function _find_metafile_in_path() {
+    local fpath=${1}
+    # this is not a redundant check,
+    # there could be files like "somefile.libtorrent_resume.torrent"
+    find ${fpath} -regextype sed -regex '^'${fpath}'[0-9a-fA-F]\{40\}\.torrent'
+}
+
+#####################
+# Load SEASON
+#####################
+if [[ -d "${METADIR}/${PACKNAME}/season" ]]; then
+for metapath in $( _find_metafile_in_path "${METADIR}/${PACKNAME}/season/" ); do
+    datapath="${DATADIR}/${PACKNAME}"
+    _load_to_rtorrent "${metapath}" "${datapath}"
+done
+fi
+
+#####################
+# Load EPISODES
+#####################
+if [[ -d "${METADIR}/${PACKNAME}/episodes" ]]; then
+for metapath in $( _find_metafile_in_path "${METADIR}/${PACKNAME}/episodes/" ); do
+    # get filename with escaped special characters
+    printf -v fname %q "$( lstor -qo info.name ${metapath} )"
+    datapath="${DATADIR}/${PACKNAME}/${fname}"
+    _load_to_rtorrent "${metapath}" "${datapath}"
+done
+fi
