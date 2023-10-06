@@ -45,18 +45,6 @@ _has_array_value() {
 }
 
 
-_get_chunk_size() {
-    fsize_arr=()
-    for fsize in $( du -sh ${1}/* | cut -f1 | numfmt --from=iec ); do  
-        fsize_arr+=( $fsize )
-    done
-    min=${fsize_arr[0]}
-    for i in ${fsize_arr[@]}; do  
-        (( i < min )) && min=$i
-    done
-}
-
-
 _get_torrent_url_from_id() {
     echo "${BTN_SITEURL}/torrents.php?action=download&id=${1}&authkey=${BTN_AUTHKEY}&torrent_pass=${BTN_TORRENTPASS}"
 }
