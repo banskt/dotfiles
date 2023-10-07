@@ -7,6 +7,22 @@ else
     exit 1
 fi
 
+################################################
+### Variables imported from configuration files
+################################################
+### BTN_PACKBASE_DIR - the base directory where packs are created.
+###     A new directory is created here for packing the season.
+### BTN_EPISODE_DIR - download directory for episodes
+### BTN_METAFILE_DIR - download directory for torrent metafiles
+### BTN_AUTHKEY - authorization key
+### BTN_TORRENTPASS - passkey for torrents 
+### BTN_ANNOUNCE - announce URL
+### BTN_SITEURL - domain name of the website
+### BTN_METAFILE_STORE (optional) - directory where torrent
+###     metafiles are stored after the packing is complete.
+################################################
+
+
 _do_endscript() {
     echo "FAILED."
     exit 1
@@ -20,6 +36,18 @@ _is_debug() {
 
 _is_verbose() {
     [[ "$VERBOSE_FLAG" == 1 ]] || return 1
+}
+
+
+function _vlog() {
+    # this function always returns True
+    { _is_verbose && echo "${@}"; } || return 0
+}
+
+
+function _dbglog() {
+    # this function always returns True
+    { _is_debug && echo "${@}"; } || return 0
 }
 
 
@@ -51,40 +79,60 @@ _get_torrent_url_from_id() {
 
 
 _download_metafile() {
-    _is_debug && echo "Download metafile: ${1}"
-    METAFILE="${BTN_METAFILE_DIR}/${1}.torrent"
-    TORRENT_URL=$( _get_torrent_url_from_id "${1}" )
-    if [[ -f ${METAFILE} ]]; then
-        _is_verbose && echo "${METAFILE} exists."
-        _is_metafile_ok ${METAFILE} || ( echo "Error in metafile. Removing." && rm -f ${METAFILE} )
-    fi  
-    if [[ ! -f ${METAFILE} ]]; then
-        _is_verbose && echo "Download metafile from: "
-        _is_verbose && echo "    ${TORRENT_URL}"
+    local tid=${1}
+    # Debug and logs
+    _dbglog "Downloading metafile for torrent ID ${tid}."
+    #
+    # Set local variables
+    local metafile="${BTN_METAFILE_DIR}/${tid}.torrent"
+    local torrent_url=$( _get_torrent_url_from_id "${tid}" )
+    #
+    # During resubmission, old metafiles may exist.
+    # If it is a download error (not a torrent file), remove. Keep otherwise.
+    if [[ -f ${metafile} ]]; then
+        _dbglog "${metafile} exists."
+        _is_metafile_ok ${metafile} || { _vlog "Error in metafile. Remove and download again." && rm -f ${metafile}; }
+    fi
+    #
+    # The main download loop: 
+    # curl following redirects.
+    if [[ ! -f ${metafile} ]]; then
+        _vlog "Download metafile from: "
+        _vlog "    ${torrent_url}"
         if _is_verbose; then
-            curl -JL ${TORRENT_URL} -o ${METAFILE}
+            curl -JL ${torrent_url} -o ${metafile}
         else
-            curl -JL ${TORRENT_URL} -o ${METAFILE} --silent
+            curl -JL ${torrent_url} -o ${metafile} --silent
         fi
     fi
-    _is_metafile_ok ${METAFILE} || return 1
+    _is_metafile_ok ${metafile} || return 1
 }
 
 
 _cleanup_metafile() {
-	METAFILE="${BTN_METAFILE_DIR}/${1}.torrent"
-	[[ -d "${BTN_METAFILE_STORE}" ]] || mkdir -p "${BTN_METAFILE_STORE}"
-    mv "${METAFILE}" "${BTN_METAFILE_STORE}/${1}.torrent"
+    local tid="${1}"
+	local metafile="${BTN_METAFILE_DIR}/${tid}.torrent"
+    local backup_metafile="${BTN_METAFILE_STORE}/${tid}.torrent"
+    if [[ -f "${metafile}" ]]; then
+        # Store a copy of metafile
+        cp "${metafile}" "${backup_metafile}"
+        # Untie metafiles from client and delete
+        local metahash="$( lstor -qo __hash__ "${metafile}" )"
+        rtxmlrpc -q d.delete_tied "${metahash}"
+    fi
 }
 
 
 _is_download_complete() {
-    METAFILE="${BTN_METAFILE_DIR}/${1}.torrent"
-    __metahash__="$( lstor -qo __hash__ "${METAFILE}" )"
-    __comphash__="$( rtcontrol -qo "%(hash)s" is_complete=y hash=${__metahash__} )"
-    _is_verbose && echo "Check for ${__metahash__} of $( lstor -qo info.name "${METAFILE}" )"
-    _is_verbose && echo "    Found: ${__comphash__}"
-    [[ "${__metahash__}" == "${__comphash__}" ]] || return 1
+    # How to check if download is complete for a given metafile?
+    # There can be hundreds of ways to check.
+    # Here, I use a simple hash check from client.
+    local metafile="${BTN_METAFILE_DIR}/${1}.torrent"
+    local metahash="$( lstor -qo __hash__ "${metafile}" )"
+    local comphash="$( rtcontrol -qo "%(hash)s" is_complete=y hash=${metahash} )"
+    _vlog "Check for ${metahash} of $( lstor -qo info.name "${metafile}" )"
+    _vlog "    Found: ${comphash}"
+    [[ "${metahash}" == "${comphash}" ]] || return 1
 }
 
 
@@ -116,8 +164,7 @@ _get_chunk_size() {
     for i in ${fsize_arr[@]}; do
         [[ ${i} -lt ${min_fsize} ]] && min_fsize=${i}
     done
-    min_fsize_readable=$( echo ${min_fsize} | numfmt --to=iec )
-
+    ## min_fsize_readable=$( echo ${min_fsize} | numfmt --to=iec )
     # convert filesize to MB
     fsize=$( echo "${min_fsize}" | awk ' {$1/=1048576; printf "%0.2f",$1} ' | cut -d'.' -f1)
 
@@ -150,7 +197,7 @@ _show_help() {
         echo "Error: ${2}"
         echo ""
     fi
-    echo "btn-autopack: Download and automatically pack seasons from BTN."
+    echo "btn-autopack: Download and pack seasons from BTN."
     echo "Usage:"
     echo "    btn-autopack [OPTIONS] -b <id1> <id2> ... -r <release_name> -d <directory_name>"
     echo "Flags:"
@@ -165,27 +212,31 @@ _show_help() {
 }
 
 
-VERBOSE_FLAG=1
-BTNID_ARRAY=()
+# Current default is verbose and debug.
+# After using this a few more times, I can turn them off.
 DEBUG_FLAG=1
+VERBOSE_FLAG=1
+
+# Process arguments from command line
+btnid_array=()
 while [[ $# -gt 0 ]]; do
     key=${1}
-    _is_debug && echo "Current key = ${1}"
-    _is_debug && echo "Next key = ${2}"
+    _dbglog "Current key = ${1}"
+    _dbglog "Next key = ${2}"
     case ${key} in
         "-b" | "--btnid")
             while [[ ! -z "${2}" && "${2}" != "-"* ]]; do
-                _is_debug && echo "  Key is ${2}. Grab!"
-                BTNID_ARRAY+=( "${2}" )
+                _dbglog "  Key is ${2}. Grab!"
+                btnid_array+=( "${2}" )
                 shift
             done
             shift;;
         "-r" | "--release")
-            RELEASENAME=${2}
+            release_name=${2}
             shift
             shift;;
         "-d" | "--dir")
-            PACKDIR=${2}
+            packdir_name=${2}
             shift
             shift;;
         "-v" | "--verbose")
@@ -199,19 +250,18 @@ while [[ $# -gt 0 ]]; do
             shift;;
         *)
             _show_help 1 "Wrong command"
-            UNKNOWN=1
             shift;;
     esac
 done
 
-_is_debug && echo ${RELEASENAME}
+_dbglog ${release_name}
 
-[[ ! -z "${RELEASENAME}" ]] || _show_help 1 "Please provide a release name"
-[[ "${#BTNID_ARRAY[@]}" -gt 1 ]] || _show_help 1 "Please provide more than one torrent IDs"
+[[ ! -z "${release_name}" ]] || _show_help 1 "Please provide a release name"
+[[ "${#btnid_array[@]}" -gt 1 ]] || _show_help 1 "Please provide more than one torrent IDs"
 
-if [[ -z "${PACKDIR}" ]]; then
-    echo "Using release name as directory"
-    PACKDIR="${RELEASENAME}"
+if [[ -z "${packdir_name}" ]]; then
+    _vlog "Using release name as directory"
+    packdir_name="${release_name}"
 fi
 
 if [[ -z "${BTN_METAFILE_STORE}" ]]; then
@@ -221,81 +271,77 @@ fi
 
 echo ""
 echo "------------------------------"
-echo "Release Name: ${RELEASENAME}"
-echo "Target Directory: ${PACKDIR}"
-echo "Number of episodes: ${#BTNID_ARRAY[@]}"
-echo "BTN Torrent IDs: ${BTNID_ARRAY[@]}"
+echo "Release Name: ${release_name}"
+echo "Target Directory: ${packdir_name}"
+echo "Number of episodes: ${#btnid_array[@]}"
+echo "BTN Torrent IDs: ${btnid_array[@]}"
 echo "------------------------------"
 echo " "
 
 # Download the torrents from BTN and put them in watch directory
 # This will automatically start the download
 echo "Downloading meta files from BTN."
-for btnid in ${BTNID_ARRAY[@]}; do
-    _is_debug && echo "BTN Torrent ID: ${btnid}"
+for btnid in ${btnid_array[@]}; do
+    _dbglog "BTN Torrent ID: ${btnid}"
     _download_metafile ${btnid} || _do_endscript
 done
 
 # Create the requested directory
-[[ -d "${BTN_PACKBASE_DIR}/${PACKDIR}" ]] || mkdir -p "${BTN_PACKBASE_DIR}/${PACKDIR}"
+[[ -d "${BTN_PACKBASE_DIR}/${packdir_name}" ]] || mkdir -p "${BTN_PACKBASE_DIR}/${packdir_name}"
 
 # Watch the episode download directory and symlink when 
 # download completes
-#_all_downloads_complete() {
-#    COMPLETE_FLAG=1
-#    for btnid in ${BTNID_ARRAY[@]}; do
-#        _is_download_complete ${btnid} || COMPLETE_FLAG=0
-#    done
-#    [[ "${COMPLETE_FLAG}" == 1 ]] || return 1
-#}
-
-#until _all_downloads_complete
-COMPLETED_ARRAY=()
-for btnid in ${BTNID_ARRAY[@]}; do
-    if ! _has_array_value "${btnid}" "${COMPLETED_ARRAY[@]}"; then
-        _is_download_complete "${btnid}" && COMPLETED_ARRAY+=( "${btnid}"  )
+# This checking loop could be put in a separate function
+# but requires some array arguments to be passed around.
+# So, it stays here for now.
+# ------------ BEGIN CHECK --------------------------------
+dl_complete_array=()
+for btnid in ${btnid_array[@]}; do
+    if ! _has_array_value "${btnid}" "${dl_complete_array[@]}"; then
+        _is_download_complete "${btnid}" && dl_complete_array+=( "${btnid}"  )
     fi
 done
 
-_is_debug && echo "Number of complete torrents: ${#COMPLETED_ARRAY[@]}"
-_is_debug && echo "Complete torrents: ${COMPLETED_ARRAY[@]}"
+_dbglog "Number of complete torrents: ${#dl_complete_array[@]}"
+_dbglog "Complete torrents: ${dl_complete_array[@]}"
 
-until [[ "${#BTNID_ARRAY[@]}" == "${#COMPLETED_ARRAY[@]}" ]]
+until [[ "${#btnid_array[@]}" == "${#dl_complete_array[@]}" ]]
 do
-    echo "Download completed for: ${COMPLETED_ARRAY[@]}"
+    echo "Download completed for: ${dl_complete_array[@]}"
     echo "Waiting for other downloads to complete ..."
     sleep 30
 	#--- update after sleeping --
-	for btnid in ${BTNID_ARRAY[@]}; do
-        _is_debug && echo "Check ${btnid} in ${COMPLETED_ARRAY[@]} | if not present call rtorrent"
-        if ! _has_array_value "${btnid}" "${COMPLETED_ARRAY[@]}"; then
-            _is_download_complete "${btnid}" && COMPLETED_ARRAY+=( "${btnid}"  )
+	for btnid in ${btnid_array[@]}; do
+        _dbglog "Check ${btnid} in ${dl_complete_array[@]} | if not present, call rtorrent"
+        if ! _has_array_value "${btnid}" "${dl_complete_array[@]}"; then
+            _is_download_complete "${btnid}" && dl_complete_array+=( "${btnid}"  )
         fi
 	done
 done
 echo "All downloads are complete."
+# ------------ END CHECK --------------------------------
 
 echo "Link downloaded files to new upload directory."
-for btnid in ${BTNID_ARRAY[@]}; do
+for btnid in ${btnid_array[@]}; do
     episode_filename=$( lstor -qo info.name "${BTN_METAFILE_DIR}/${btnid}.torrent" )
     sourcefile="${BTN_EPISODE_DIR}/${episode_filename}"
-    targetfile="${BTN_PACKBASE_DIR}/${PACKDIR}/${episode_filename}"
+    targetfile="${BTN_PACKBASE_DIR}/${packdir_name}/${episode_filename}"
     [[ -f "${targetfile}" ]] || ln "${sourcefile}" "${targetfile}" || _do_endscript
 done
 
 echo "Creating new torrent file."
-CHUNK_SIZE=$( _get_chunk_size ${BTN_PACKBASE_DIR}/${PACKDIR} )
-echo "Calculated chunk size: ${CHUNK_SIZE}"
-MKTORRENT_CMD="mktor --private --comment=BTN -o ${BTN_PACKBASE_DIR}/${RELEASENAME}.torrent --chunk-min=${CHUNK_SIZE} --chunk-max=${CHUNK_SIZE}"
-[[ -f ${BTN_PACKBASE_DIR}/${RELEASENAME}.torrent ]] && rm -f ${BTN_PACKBASE_DIR}/${RELEASENAME}.torrent
+chunk_size=$( _get_chunk_size ${BTN_PACKBASE_DIR}/${packdir_name} )
+echo "Calculated chunk size: ${chunk_size}"
+mkcmd="mktor --private --comment=BTN -o ${BTN_PACKBASE_DIR}/${release_name}.torrent --chunk-min=${chunk_size} --chunk-max=${chunk_size}"
+[[ -f ${BTN_PACKBASE_DIR}/${release_name}.torrent ]] && rm -f ${BTN_PACKBASE_DIR}/${release_name}.torrent
 if _is_verbose; then
-    ${MKTORRENT_CMD} -v ${BTN_PACKBASE_DIR}/${PACKDIR} ${BTN_ANNOUNCE} || _do_endscript
+    ${mkcmd} -v ${BTN_PACKBASE_DIR}/${packdir_name} ${BTN_ANNOUNCE} || _do_endscript
 else
-    ${MKTORRENT_CMD} -q ${BTN_PACKBASE_DIR}/${PACKDIR} ${BTN_ANNOUNCE} || _do_endscript
+    ${mkcmd} -q ${BTN_PACKBASE_DIR}/${packdir_name} ${BTN_ANNOUNCE} || _do_endscript
 fi
 
 echo "Cleaning up metafiles."
-for btnid in ${BTNID_ARRAY[@]}; do
+for btnid in ${btnid_array[@]}; do
 	_cleanup_metafile ${btnid} || _do_endscript
 done
 
