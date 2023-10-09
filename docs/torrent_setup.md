@@ -556,3 +556,42 @@ micromamba deactivate
 micromamba create -n py27 python=2.7 -c conda-forge
 micromamba activate py27
 ```
+
+## Mount sshfs on feral
+
+Feralhosting does not provide root access. But I wanted to mount my storage server
+on feralhosting. One option without root access is `sshfs`.
+I installed `sshfs` on feralhosting with these steps:
+
+  1. Build [ninja](https://ninja-build.org/) - [Github](https://github.com/ninja-build/ninja)
+  2. Install [meson](https://mesonbuild.com/Getting-meson.html). I downloaded the latest
+  release from Github, packed it into a zipapp an linked it to my local bin.
+```bash
+./packaging/create_zipapp.py --outfile meson.pyz --interpreter '/usr/bin/env python3' .
+ln -s /path/to/meson.pyz ~/usr/bin/meson
+meson --help # check installation.
+```
+  3. Install [libfuse](https://github.com/libfuse/libfuse) locally.
+```bash
+tar -zxf fuse-3.16.1.tar.gz
+cd fuse-3.16.1/
+mkdir build; cd build
+meson setup --prefix=/media/sdt/banskt/usr/apps/libfuse ..
+meson configure -D initscriptdir=''
+meson configure -D useroot=false
+meson configure -D utils=false
+ninja
+ninja install
+```
+  4. Install [sshfuse]() locally. Requires `fuse3`, so configure proper pkg-config path
+```bash
+export PKG_CONFIG_PATH="/media/sdt/banskt/usr/apps/libfuse/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH}"
+tar -xf sshfs-3.7.3.tar.xz
+cd sshfs-3.7.3
+mkdir build; cd build
+meson setup --prefix=/media/sdt/banskt/usr/apps/sshfs ..
+ninja
+nija install
+```
+
+Finally, remember to set the custom `LD_LIBRARY_PATH` for the `libfuse3.so` library in the bashrc.
