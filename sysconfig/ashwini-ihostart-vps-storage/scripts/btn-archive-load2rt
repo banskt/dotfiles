@@ -10,7 +10,7 @@ fi
 PACKNAME="$( basename ${_METAPATH} )"
 
 VERBOSE_FLAG=1
-DEBUG_FLAG=1
+DEBUG_FLAG=0
 
 function _is_verbose() {
     [[ "$VERBOSE_FLAG" == 1 ]] || return 1
