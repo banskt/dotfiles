@@ -557,6 +557,80 @@ micromamba create -n py27 python=2.7 -c conda-forge
 micromamba activate py27
 ```
 
+## Jellyfin
+
+I followed the [instructions for installation on Linux Generic](https://jellyfin.org/docs/general/installation/linux#linux-generic-amd64).
+
+### Custom installation of `jellyfin-ffmpeg`.
+
+Check required dependencies of the debian packages
+```bash
+dpkg -L jellyfin-ffmpeg6_6.0-6-bookworm_amd64.deb
+```
+Try to find out which ones are installed and which ones are not.
+```bash
+ldconfig -p
+apt list <libname>
+```
+Install the rest of the libraries. First, the `libxcb`.
+```bash
+sudo apt install libxcb1-dev
+# installs libpthread-stubs0-dev libxau-dev libxcb1-dev libxdmcp-dev x11proto-dev xorg-sgml-doctools
+sudo apt install libxcb-dri2-0-dev libxcb-randr0-dev libxcb-shm0-dev libxcb-xfixes0-dev
+# installs libxcb-dri2-0 libxcb-dri2-0-dev libxcb-randr0 libxcb-randr0-dev libxcb-render0 libxcb-render0-dev libxcb-shape0 libxcb-shape0-dev libxcb-shm0 libxcb-shm0-dev libxcb-xfixes0 libxcb-xfixes0-dev
+sudo apt install libxcb-dri3-dev libxcb-present-dev libxcb-sync-dev
+# installs libxcb-dri3-0 libxcb-dri3-dev libxcb-present-dev libxcb-present0 libxcb-sync-dev libxcb-sync1
+sudo apt install libx11-xcb-dev
+# installs libx11-dev libx11-xcb-dev libx11-xcb1 xtrans-dev
+```
+
+Install glib2.0
+```bash
+sudo apt install libglib2.0-dev
+# installs libblkid-dev libffi-dev libglib2.0-dev libglib2.0-dev-bin libmount-dev libpcre16-3 libpcre3-dev libpcre32-3 libpcrecpp0v5 libselinux1-dev libsepol-dev
+```
+
+```bash
+sudo apt install libfreetype6-dev
+# installs libbrotli-dev libfreetype-dev libfreetype6-dev
+sudo apt install libfribidi-dev
+sudo apt install libfontconfig-dev
+# installs libexpat1-dev libfontconfig-dev uuid-dev
+```
+
+Third party libraries
+
+  - libass-0.17.1
+  - libbluray-1.3.4
+  - harfbuzz-8.2.1
+  - libogg-1.3.1
+  - opus-1.4
+  - libvorbis-1.3.7
+  - flac-1.4.3
+  - libsamplerate
+  - SDL2-2.28.4
+  - libtheora-1.1.1
+  - mpg123-1.32.3
+  - lame-3.100
+  - libsndfile-1.2.2
+  - libpulse
+
+How to install libpulse-dev without installing full PulseAudio package?
+
+Dependencies of libpulse-dev package:
+libasyncns0 ✓libflac8 ✓libogg0 ✓libopus0 ✓libsndfile1 ✓libvorbis0a ✓libvorbisenc2
+libpulse-dev libpulse-mainloop-glib0 libpulse0 
+
+
+libopenmpt-0.7.3+release.autotools
+
+
+Installing `libsndfile` required linking to `mp3lame` 
+but `mp3lame` does not come with default pkgconfig file.
+```bash
+./configure CFLAGS="-I/opt/thirdpartymedia/include" LDFLAGS="-L/opt/thirdpartymedia/lib" --prefix=/opt/thirdpartymedia --disable-static
+```
+
 ## Mount sshfs on feral
 
 Feralhosting does not provide root access. But I wanted to mount my storage server
