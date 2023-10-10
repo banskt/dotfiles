@@ -40,12 +40,39 @@ function _is_verbose() {
     [[ "$VERBOSE_FLAG" == 1 ]] || return 1
 }
 
+_show_help() {
+    exitcode=${1}
+    if [[ ! -z "${2}" ]]; then
+        echo "Error: ${2}"
+        echo ""
+    fi  
+    echo "feral2ashwini: Archive files/directories from feral to ashwini"
+    echo "Usage:"
+    echo "    feral2ashwini <dirlist> <config> [rutorrent_tag]"
+    echo ""
+	echo "The source and target paths are hardcoded in the <config>"
+    echo "Currently this script only works on moving directories specified"
+    echo "in the config file." 
+    echo "    dirlist:  path of a file containing the list of directories"
+    echo "              which should be archived. These directories must be"
+    echo "              available in the source path specified in the config."
+    echo "              Hint: use 'all' for archiving all directories from the"
+    echo "              source path"
+    echo "    config:   configuration file located in ~/usr/archive-config/<config>.cfg"
+    echo "              Source configurations include:"
+    echo "              - 'tv' : ~/downloads/tv"
+    echo "              - 'btn-packs' : ~/uploads/btn-packs"
+    echo "    tag:      Label for rutorrent in ashwini (optional, default=BTNarXiv)"
+    echo ""
+    [[ $exitcode == 0 ]] && exit 0 || exit 1
+}
+
 
 # =================================================
 # Input arguments
 # =================================================
-_config_name="${1}"
-_dirlist_file="${2}"
+_dirlist_file="${1}"
+_config_name="${2}"
 _archive_rt_tag="${3}"
 
 
@@ -62,8 +89,8 @@ LOGFILE="${HOME}/usr/logs/data-archive.log"
 # Process input, check errors
 # =================================================
 if [[ -z "${_config_name}" ]] || [[ -z "${_dirlist_file}" ]]; then
-	echo "Wrong arguments for this command. Please check usage."
-	exit 1
+	errmsg="Wrong arguments for this command. Please check usage."
+	_show_help 1 "${errmsg}"
 fi
 
 # We need a local temporary directory before anything else
@@ -83,8 +110,8 @@ fi
 if [[ -f "${HOME}/usr/archive-config/${_config_name}.cfg" ]]; then
     source ${HOME}/usr/archive-config/${_config_name}.cfg
 else
-    echo "Configuration file ${HOME}/usr/archive-config/${_config_name}.cfg not found. Exiting."
-    exit 1
+    errmsg="Configuration file ${HOME}/usr/archive-config/${_config_name}.cfg not found. Exiting."
+    _show_help 1 "${errmsg}"
 fi
 
 # Get the dirlist file
@@ -99,8 +126,8 @@ if [[ "${_dirlist_file}" == "all" ]]; then
     cp ${TMP_ARCHIVE_TODO} ~/debug-archive.txt
 else
 	if [[ ! -f "${_dirlist_file}" ]]; then 
-		echo "File for directory list not available: ${_dirlist_file}"
-		exit 1
+		errmsg="Input file ${_dirlist_file} not found. Exiting"
+		_show_help 1 "${errmsg}"
 	fi
 	_vlog "Preparing to archive packs specified in ${_dirlist_file}"
 	cat "${_dirlist_file}" > "${TMP_ARCHIVE_TODO}"

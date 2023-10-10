@@ -221,8 +221,8 @@ _show_help() {
 
 # Current default is verbose and debug.
 # After using this a few more times, I can turn them off.
-DEBUG_FLAG=1
-VERBOSE_FLAG=1
+DEBUG_FLAG=0
+VERBOSE_FLAG=0
 
 # Process arguments from command line
 btnid_array=()
