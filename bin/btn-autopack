@@ -191,6 +191,13 @@ _get_chunk_size() {
 }
 
 
+_get_chunk_length() {
+    local size=$( numfmt --from=iec ${1} )
+    local length=$( echo "l($size)/l(2)" | bc -l | cut -d'.' -f1 )
+    echo ${length}
+}
+
+
 _show_help() {
     exitcode=${1}
     if [[ ! -z "${2}" ]]; then
@@ -331,14 +338,23 @@ done
 
 echo "Creating new torrent file."
 chunk_size=$( _get_chunk_size ${BTN_PACKBASE_DIR}/${packdir_name} )
-echo "Calculated chunk size: ${chunk_size}"
-mkcmd="mktor --private --comment=BTN -o ${BTN_PACKBASE_DIR}/${release_name}.torrent --chunk-min=${chunk_size} --chunk-max=${chunk_size}"
+chunk_length="$( _get_chunk_length ${chunk_size} )"
+echo "Calculated chunk size: ${chunk_size} | chunk piece length: ${chunk_length}"
+#
+# using mktorrent
+mkcmd="mktorrent -p -t 16 -a ${BTN_ANNOUNCE} --comment=BTN -l ${chunk_length} -o ${BTN_PACKBASE_DIR}/${release_name}.torrent"
+_is_verbose && mkcmd="${mkcmd} -v"
+#
+# or mktor
+# mkcmd="mktor --private --comment=BTN -o ${BTN_PACKBASE_DIR}/${release_name}.torrent --chunk-min=${chunk_size} --chunk-max=${chunk_size}"
+# _is_verbose && mkcmd="${mkcmd} -v" || mkcmd="${mkcmd} -q"
+#
+# Remove any old torrent if present
 [[ -f ${BTN_PACKBASE_DIR}/${release_name}.torrent ]] && rm -f ${BTN_PACKBASE_DIR}/${release_name}.torrent
-if _is_verbose; then
-    ${mkcmd} -v ${BTN_PACKBASE_DIR}/${packdir_name} ${BTN_ANNOUNCE} || _do_endscript
-else
-    ${mkcmd} -q ${BTN_PACKBASE_DIR}/${packdir_name} ${BTN_ANNOUNCE} || _do_endscript
-fi
+#
+# Create the torrent.
+${mkcmd} ${BTN_PACKBASE_DIR}/${packdir_name} || _do_endscript
+#${mkcmd} ${BTN_PACKBASE_DIR}/${packdir_name} ${BTN_ANNOUNCE} || _do_endscript
 
 echo "Cleaning up metafiles."
 for btnid in ${btnid_array[@]}; do
