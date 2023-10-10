@@ -583,6 +583,9 @@ while installing the third party libraries.
 For the record, here are the libraries which I installed.
 
 ```bash
+sudo apt install cmake # required for building some packages (e.g. x265)
+# installs cmake cmake-data dh-elpa-helper emacsen-common libjsoncpp25 librhash0
+
 sudo apt install libxcb1-dev # required by jellyfin-ffmpeg
 # installs libpthread-stubs0-dev libxau-dev libxcb1-dev libxdmcp-dev x11proto-dev xorg-sgml-doctools
 
@@ -611,6 +614,15 @@ sudo apt install libasound-dev # required by portaudio
 
 sudo apt install libpciaccess-dev # required by jellyfin-ffmpeg
 # installs libpciaccess-dev libpciaccess0
+
+sudo apt install libtiff-dev # optional for libwebp
+# installs libdeflate-dev libjbig-dev liblzma-dev libtiff-dev libtiffxx5
+
+sudo apt install libxshmfence-dev # required by jellyfin-ffmpeg
+# installs libxshmfence-dev libxshmfence1
+
+sudo apt install libzstd-dev # required by jellyfin-ffmped, system already had libzstd
+# installs libzstd-dev
 ```
 
 I installed the third party libraries one-by-one.
@@ -633,6 +645,13 @@ which depends on previous packages.
   - libpulse
   - libportaudio
   - libopenmpt-0.7.3+release.autotools
+  - [libwebp-1.3.2](https://www.linuxfromscratch.org/blfs/view/svn/general/libwebp.html)
+  - [NASM](https://trac.ffmpeg.org/wiki/CompilationGuide/Ubuntu) - assembler used by other codecs
+  - [YASM](https://www.linuxfromscratch.org/blfs/view/stable/general/yasm.html) - complete rewrite of the NASM-2.16.01 assembler
+  - [libvpx-1.13.1](https://trac.ffmpeg.org/wiki/CompilationGuide/Ubuntu)
+  - [x264](https://code.videolan.org/videolan/x264)
+  - [x265](https://bitbucket.org/multicoreware/x265_git/wiki/Home) - install with `-DENABLE_SHARED=ON`
+  - [libzvbi](https://zapping.sourceforge.net/ZVBI/index.html)
 
 **Notes on installing third party libraries**
 
@@ -658,6 +677,68 @@ sudo ninja install
 ```bash
 ./configure --prefix=/opt/thirdpartymedia --enable-cxx --disable-static
 ```
+  - Configuring many of the packages using `./configure` require specific `--disable-static`, some also require `--enable-static`.
+  Here is an example for `libvpx`:
+```bash
+./configure --prefix=/opt/thirdpartymedia --disable-examples --disable-unit-tests --enable-vp9-highbitdepth --as=yasm --disable-static --enable-shared
+```
+  - Configuration of `x264`:
+```bash
+./configure AS=nasm --prefix=/opt/thirdpartymedia --enable-shared --enable-asm
+```
+
+I defined `PATH` and `LD_LIBRARY_PATH` for the dependencies in `/opt/thirdpartymedia`.
+Finally, I downloaded and installed [jellyfin-ffmpeg](https://github.com/jellyfin/jellyfin-ffmpeg) from their source code.
+```bash
+wget -O jellyfin-ffmpeg-6.0-6.tar.gz https://github.com/jellyfin/jellyfin-ffmpeg/archive/refs/tags/v6.0-6.tar.gz
+tar -zxf jellyfin-ffmpeg-6.0-6.tar.gz
+cd jellyfin-ffmpeg-6.0-6
+mkdir build && cd build
+module load openssl/3.1.3
+micromamba activate py39
+source myconf.sh
+make -j3
+sudo make install
+```
+In the above, I used the `myconf.sh` which I wrote down with all the options that I needed:
+```bash
+#!/bin/bash
+../configure \
+  --prefix="/opt/jellyfin/jellyfin-ffmpeg-6.0-6" \
+  --extra-cflags="-I/opt/thirdpartymedia/include" \
+  --extra-ldflags="-L/opt/thirdpartymedia/lib -L/opt/thirdpartymedia/lib/x86_64-linux-gnu" \
+  --extra-libs="-lpthread -lm" \
+  --ld="g++" \
+  --enable-gpl \
+  --enable-libass \
+  --enable-libbluray \
+  --enable-libfdk-aac \
+  --enable-libfontconfig \
+  --enable-libfreetype \
+  --enable-libfribidi \
+  --enable-libmp3lame \
+  --enable-libopenmpt \
+  --enable-libopus \
+  --enable-libpulse \
+  --enable-libtheora \
+  --enable-libvorbis \
+  --enable-libvpx \
+  --enable-libx264 \
+  --enable-libx265 \
+  --enable-libxml2 \
+  --enable-libzvbi \
+  --enable-openssl \
+  --enable-zlib \
+  --enable-nonfree \
+  --disable-doc \
+  --disable-htmlpages \
+  --disable-manpages \
+  --disable-podpages \
+  --disable-txtpages
+```
+
+I do not have AV1 support but I will do that later.
+
 
 ## Mount sshfs
 
