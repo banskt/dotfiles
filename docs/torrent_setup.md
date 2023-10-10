@@ -556,3 +556,228 @@ micromamba deactivate
 micromamba create -n py27 python=2.7 -c conda-forge
 micromamba activate py27
 ```
+
+## Jellyfin
+
+I followed the [instructions for installation on Linux Generic](https://jellyfin.org/docs/general/installation/linux#linux-generic-amd64).
+
+### Custom installation of `jellyfin-ffmpeg`.
+
+Check required dependencies of the debian packages
+```bash
+dpkg -L jellyfin-ffmpeg6_6.0-6-bookworm_amd64.deb
+```
+Try to find out which ones are installed and which ones are not.
+```bash
+ldconfig -p
+apt list <libname>
+```
+For installing the unmet dependencies,
+I made some ad-hoc distinction between the core libraries
+and the third party media libraries. 
+I installed all the core libraries using `apt`
+and compiled the third party media libraries in a separate location,
+`/opt/thirdpartymedia`. 
+I also installed other core libraries on an as-required basis,
+while installing the third party libraries.
+For the record, here are the libraries which I installed.
+
+```bash
+sudo apt install cmake # required for building some packages (e.g. x265)
+# installs cmake cmake-data dh-elpa-helper emacsen-common libjsoncpp25 librhash0
+
+sudo apt install libxcb1-dev # required by jellyfin-ffmpeg
+# installs libpthread-stubs0-dev libxau-dev libxcb1-dev libxdmcp-dev x11proto-dev xorg-sgml-doctools
+
+sudo apt install libxcb-dri2-0-dev libxcb-randr0-dev libxcb-shm0-dev libxcb-xfixes0-dev # required by jellyfin-ffmpeg
+# installs libxcb-dri2-0 libxcb-dri2-0-dev libxcb-randr0 libxcb-randr0-dev libxcb-render0 libxcb-render0-dev libxcb-shape0 libxcb-shape0-dev libxcb-shm0 libxcb-shm0-dev libxcb-xfixes0 libxcb-xfixes0-dev
+
+sudo apt install libxcb-dri3-dev libxcb-present-dev libxcb-sync-dev # required by jellyfin-ffmpeg
+# installs libxcb-dri3-0 libxcb-dri3-dev libxcb-present-dev libxcb-present0 libxcb-sync-dev libxcb-sync1
+
+sudo apt install libx11-xcb-dev # required by jellyfin-ffmpeg
+# installs libx11-dev libx11-xcb-dev libx11-xcb1 xtrans-dev
+
+sudo apt install libglib2.0-dev # required by third-party
+# installs libblkid-dev libffi-dev libglib2.0-dev libglib2.0-dev-bin libmount-dev libpcre16-3 libpcre3-dev libpcre32-3 libpcrecpp0v5 libselinux1-dev libsepol-dev
+
+sudo apt install libfreetype6-dev # required by jellyfin-ffmpeg
+# installs libbrotli-dev libfreetype-dev libfreetype6-dev
+
+sudo apt install libfribidi-dev # required by jellyfin-ffmpeg
+
+sudo apt install libfontconfig-dev # required by jellyfin-ffmpeg
+# installs libexpat1-dev libfontconfig-dev uuid-dev
+
+sudo apt install libasound-dev # required by portaudio
+# installs alsa-topology-conf alsa-ucm-conf libasound2 libasound2-data libasound2-dev
+
+sudo apt install libpciaccess-dev # required by jellyfin-ffmpeg
+# installs libpciaccess-dev libpciaccess0
+
+sudo apt install libtiff-dev # optional for libwebp
+# installs libdeflate-dev libjbig-dev liblzma-dev libtiff-dev libtiffxx5
+
+sudo apt install libxshmfence-dev # required by jellyfin-ffmpeg
+# installs libxshmfence-dev libxshmfence1
+
+sudo apt install libzstd-dev # required by jellyfin-ffmped, system already had libzstd
+# installs libzstd-dev
+```
+
+I installed the third party libraries one-by-one.
+The order of installation is important as there are packages
+which depends on previous packages.
+
+  - libass-0.17.1
+  - libbluray-1.3.4
+  - harfbuzz-8.2.1
+  - libogg-1.3.1
+  - opus-1.4
+  - libvorbis-1.3.7
+  - flac-1.4.3
+  - libsamplerate
+  - SDL2-2.28.4
+  - libtheora-1.1.1
+  - mpg123-1.32.3
+  - lame-3.100
+  - libsndfile-1.2.2
+  - libpulse
+  - libportaudio
+  - libopenmpt-0.7.3+release.autotools
+  - [libwebp-1.3.2](https://www.linuxfromscratch.org/blfs/view/svn/general/libwebp.html)
+  - [NASM](https://trac.ffmpeg.org/wiki/CompilationGuide/Ubuntu) - assembler used by other codecs
+  - [YASM](https://www.linuxfromscratch.org/blfs/view/stable/general/yasm.html) - complete rewrite of the NASM-2.16.01 assembler
+  - [libvpx-1.13.1](https://trac.ffmpeg.org/wiki/CompilationGuide/Ubuntu)
+  - [x264](https://code.videolan.org/videolan/x264)
+  - [x265](https://bitbucket.org/multicoreware/x265_git/wiki/Home) - install with `-DENABLE_SHARED=ON`
+  - [libzvbi](https://zapping.sourceforge.net/ZVBI/index.html)
+
+**Notes on installing third party libraries**
+
+  - `libopenmpt` depends on `libmpg123`, `ogg`, `vorbis`, `vorbisfil`, `libpulse`, `libpulse-simple`, `libportaudio`, `libportaudiocpp`
+  - Installing `libsndfile` required linking to `mp3lame` 
+    but `mp3lame` does not come with default pkgconfig file.
+```bash
+./configure CFLAGS="-I/opt/thirdpartymedia/include" LDFLAGS="-L/opt/thirdpartymedia/lib" --prefix=/opt/thirdpartymedia --disable-static
+```
+  - On a server, we do not need the full `pulseaudio` daemon.
+    Installing `libpulse` libraries from pulseaudio package required installing
+    only the client libraries without the daemon, which can be done via:
+```bash
+wget https://www.freedesktop.org/software/pulseaudio/releases/pulseaudio-16.1.tar.xz
+tar -xf pulseaudio-16.1.tar.xz
+cd pulseaudio-16.1
+mkdir build; cd build
+meson setup --prefix=/opt/thirdpartymedia -Ddaemon=false -Dclient=true -Ddoxygen=false -Dman=false -Dtests=false -Ddatabase=gdbm ..
+ninja -j2
+sudo ninja install
+```
+  - Installing `portaudio` with `libportaudiocpp` requires the `--enable-cxx` flag:
+```bash
+./configure --prefix=/opt/thirdpartymedia --enable-cxx --disable-static
+```
+  - Configuring many of the packages using `./configure` require specific `--disable-static`, some also require `--enable-static`.
+  Here is an example for `libvpx`:
+```bash
+./configure --prefix=/opt/thirdpartymedia --disable-examples --disable-unit-tests --enable-vp9-highbitdepth --as=yasm --disable-static --enable-shared
+```
+  - Configuration of `x264`:
+```bash
+./configure AS=nasm --prefix=/opt/thirdpartymedia --enable-shared --enable-asm
+```
+
+I defined `PATH` and `LD_LIBRARY_PATH` for the dependencies in `/opt/thirdpartymedia`.
+Finally, I downloaded and installed [jellyfin-ffmpeg](https://github.com/jellyfin/jellyfin-ffmpeg) from their source code.
+```bash
+wget -O jellyfin-ffmpeg-6.0-6.tar.gz https://github.com/jellyfin/jellyfin-ffmpeg/archive/refs/tags/v6.0-6.tar.gz
+tar -zxf jellyfin-ffmpeg-6.0-6.tar.gz
+cd jellyfin-ffmpeg-6.0-6
+mkdir build && cd build
+module load openssl/3.1.3
+micromamba activate py39
+source myconf.sh
+make -j3
+sudo make install
+```
+In the above, I used the `myconf.sh` which I wrote down with all the options that I needed:
+```bash
+#!/bin/bash
+../configure \
+  --prefix="/opt/jellyfin/jellyfin-ffmpeg-6.0-6" \
+  --extra-cflags="-I/opt/thirdpartymedia/include" \
+  --extra-ldflags="-L/opt/thirdpartymedia/lib -L/opt/thirdpartymedia/lib/x86_64-linux-gnu" \
+  --extra-libs="-lpthread -lm" \
+  --ld="g++" \
+  --enable-gpl \
+  --enable-libass \
+  --enable-libbluray \
+  --enable-libfdk-aac \
+  --enable-libfontconfig \
+  --enable-libfreetype \
+  --enable-libfribidi \
+  --enable-libmp3lame \
+  --enable-libopenmpt \
+  --enable-libopus \
+  --enable-libpulse \
+  --enable-libtheora \
+  --enable-libvorbis \
+  --enable-libvpx \
+  --enable-libx264 \
+  --enable-libx265 \
+  --enable-libxml2 \
+  --enable-libzvbi \
+  --enable-openssl \
+  --enable-zlib \
+  --enable-nonfree \
+  --disable-doc \
+  --disable-htmlpages \
+  --disable-manpages \
+  --disable-podpages \
+  --disable-txtpages
+```
+
+I do not have AV1 support but I will do that later.
+
+
+## Mount sshfs
+
+One of my frontend server does not provide root access. 
+But I wanted to mount my storage server there.
+One option without root access is `sshfs`, 
+but it would still require `FUSE` to be enabled on the kernel.
+If `FUSE` / `fusermount3` is not available, then we cannot use `sshfs`.
+I installed `sshfs` with these steps:
+
+  1. Build [ninja](https://ninja-build.org/) - [Github](https://github.com/ninja-build/ninja)
+  2. Install [meson](https://mesonbuild.com/Getting-meson.html). I downloaded the latest
+  release from Github, packed it into a zipapp an linked it to my local bin.
+```bash
+./packaging/create_zipapp.py --outfile meson.pyz --interpreter '/usr/bin/env python3' .
+ln -s /path/to/meson.pyz ~/usr/bin/meson
+meson --help # check installation.
+```
+  3. Install [libfuse](https://github.com/libfuse/libfuse) locally.
+```bash
+tar -zxf fuse-3.16.1.tar.gz
+cd fuse-3.16.1/
+mkdir build; cd build
+meson setup --prefix=/media/sdt/banskt/usr/apps/libfuse ..
+meson configure -D initscriptdir=''
+meson configure -D useroot=false
+meson configure -D utils=false
+ninja
+ninja install
+```
+  4. Install [sshfuse]() locally. Requires `fuse3`, so configure proper pkg-config path
+```bash
+export PKG_CONFIG_PATH="/media/sdt/banskt/usr/apps/libfuse/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH}"
+tar -xf sshfs-3.7.3.tar.xz
+cd sshfs-3.7.3
+mkdir build; cd build
+meson setup --prefix=/media/sdt/banskt/usr/apps/sshfs ..
+ninja
+nija install
+```
+
+Finally, remember to set the custom `LD_LIBRARY_PATH` for the `libfuse3.so` library in the bashrc.
