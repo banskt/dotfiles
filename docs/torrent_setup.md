@@ -572,33 +572,50 @@ Try to find out which ones are installed and which ones are not.
 ldconfig -p
 apt list <libname>
 ```
-Install the rest of the libraries. First, the `libxcb`.
+For installing the unmet dependencies,
+I made some ad-hoc distinction between the core libraries
+and the third party media libraries. 
+I installed all the core libraries using `apt`
+and compiled the third party media libraries in a separate location,
+`/opt/thirdpartymedia`. 
+I also installed other core libraries on an as-required basis,
+while installing the third party libraries.
+For the record, here are the libraries which I installed.
+
 ```bash
-sudo apt install libxcb1-dev
+sudo apt install libxcb1-dev # required by jellyfin-ffmpeg
 # installs libpthread-stubs0-dev libxau-dev libxcb1-dev libxdmcp-dev x11proto-dev xorg-sgml-doctools
-sudo apt install libxcb-dri2-0-dev libxcb-randr0-dev libxcb-shm0-dev libxcb-xfixes0-dev
+
+sudo apt install libxcb-dri2-0-dev libxcb-randr0-dev libxcb-shm0-dev libxcb-xfixes0-dev # required by jellyfin-ffmpeg
 # installs libxcb-dri2-0 libxcb-dri2-0-dev libxcb-randr0 libxcb-randr0-dev libxcb-render0 libxcb-render0-dev libxcb-shape0 libxcb-shape0-dev libxcb-shm0 libxcb-shm0-dev libxcb-xfixes0 libxcb-xfixes0-dev
-sudo apt install libxcb-dri3-dev libxcb-present-dev libxcb-sync-dev
+
+sudo apt install libxcb-dri3-dev libxcb-present-dev libxcb-sync-dev # required by jellyfin-ffmpeg
 # installs libxcb-dri3-0 libxcb-dri3-dev libxcb-present-dev libxcb-present0 libxcb-sync-dev libxcb-sync1
-sudo apt install libx11-xcb-dev
+
+sudo apt install libx11-xcb-dev # required by jellyfin-ffmpeg
 # installs libx11-dev libx11-xcb-dev libx11-xcb1 xtrans-dev
-```
 
-Install glib2.0
-```bash
-sudo apt install libglib2.0-dev
+sudo apt install libglib2.0-dev # required by third-party
 # installs libblkid-dev libffi-dev libglib2.0-dev libglib2.0-dev-bin libmount-dev libpcre16-3 libpcre3-dev libpcre32-3 libpcrecpp0v5 libselinux1-dev libsepol-dev
-```
 
-```bash
-sudo apt install libfreetype6-dev
+sudo apt install libfreetype6-dev # required by jellyfin-ffmpeg
 # installs libbrotli-dev libfreetype-dev libfreetype6-dev
-sudo apt install libfribidi-dev
-sudo apt install libfontconfig-dev
+
+sudo apt install libfribidi-dev # required by jellyfin-ffmpeg
+
+sudo apt install libfontconfig-dev # required by jellyfin-ffmpeg
 # installs libexpat1-dev libfontconfig-dev uuid-dev
+
+sudo apt install libasound-dev # required by portaudio
+# installs alsa-topology-conf alsa-ucm-conf libasound2 libasound2-data libasound2-dev
+
+sudo apt install libpciaccess-dev # required by jellyfin-ffmpeg
+# installs libpciaccess-dev libpciaccess0
 ```
 
-Third party libraries
+I installed the third party libraries one-by-one.
+The order of installation is important as there are packages
+which depends on previous packages.
 
   - libass-0.17.1
   - libbluray-1.3.4
@@ -614,28 +631,42 @@ Third party libraries
   - lame-3.100
   - libsndfile-1.2.2
   - libpulse
+  - libportaudio
+  - libopenmpt-0.7.3+release.autotools
 
-How to install libpulse-dev without installing full PulseAudio package?
+**Notes on installing third party libraries**
 
-Dependencies of libpulse-dev package:
-libasyncns0 ✓libflac8 ✓libogg0 ✓libopus0 ✓libsndfile1 ✓libvorbis0a ✓libvorbisenc2
-libpulse-dev libpulse-mainloop-glib0 libpulse0 
-
-
-libopenmpt-0.7.3+release.autotools
-
-
-Installing `libsndfile` required linking to `mp3lame` 
-but `mp3lame` does not come with default pkgconfig file.
+  - `libopenmpt` depends on `libmpg123`, `ogg`, `vorbis`, `vorbisfil`, `libpulse`, `libpulse-simple`, `libportaudio`, `libportaudiocpp`
+  - Installing `libsndfile` required linking to `mp3lame` 
+    but `mp3lame` does not come with default pkgconfig file.
 ```bash
 ./configure CFLAGS="-I/opt/thirdpartymedia/include" LDFLAGS="-L/opt/thirdpartymedia/lib" --prefix=/opt/thirdpartymedia --disable-static
 ```
+  - On a server, we do not need the full `pulseaudio` daemon.
+    Installing `libpulse` libraries from pulseaudio package required installing
+    only the client libraries without the daemon, which can be done via:
+```bash
+wget https://www.freedesktop.org/software/pulseaudio/releases/pulseaudio-16.1.tar.xz
+tar -xf pulseaudio-16.1.tar.xz
+cd pulseaudio-16.1
+mkdir build; cd build
+meson setup --prefix=/opt/thirdpartymedia -Ddaemon=false -Dclient=true -Ddoxygen=false -Dman=false -Dtests=false -Ddatabase=gdbm ..
+ninja -j2
+sudo ninja install
+```
+  - Installing `portaudio` with `libportaudiocpp` requires the `--enable-cxx` flag:
+```bash
+./configure --prefix=/opt/thirdpartymedia --enable-cxx --disable-static
+```
 
-## Mount sshfs on feral
+## Mount sshfs
 
-Feralhosting does not provide root access. But I wanted to mount my storage server
-on feralhosting. One option without root access is `sshfs`.
-I installed `sshfs` on feralhosting with these steps:
+One of my frontend server does not provide root access. 
+But I wanted to mount my storage server there.
+One option without root access is `sshfs`, 
+but it would still require `FUSE` to be enabled on the kernel.
+If `FUSE` / `fusermount3` is not available, then we cannot use `sshfs`.
+I installed `sshfs` with these steps:
 
   1. Build [ninja](https://ninja-build.org/) - [Github](https://github.com/ninja-build/ninja)
   2. Install [meson](https://mesonbuild.com/Getting-meson.html). I downloaded the latest
