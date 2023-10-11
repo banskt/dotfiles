@@ -82,7 +82,7 @@ _archive_rt_tag="${3}"
 VERBOSE_FLAG=1
 RTORRENT_SESSION_DIR="${HOME}/private/rtorrent/work"
 LOCAL_TMPDIR="${HOME}/usr/tmp/archive"
-LOGFILE="${HOME}/usr/logs/data-archive.log"
+LOGFILE="${HOME}/usr/logs/feral2ashwini.log"
 
 
 # =================================================
