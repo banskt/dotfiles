@@ -1,5 +1,45 @@
 #!/usr/bin/env bash
 
+_show_help() {
+    exitcode=${1}
+    if [[ ! -z "${2}" ]]; then
+        echo "Error: ${2}"
+        echo ""
+    fi
+    local myname=$( basename $0 )
+    echo "${myname}: load torrents from an archive metafile directory"
+    echo "Usage:"
+    echo "    ${myname} <path-to-metafile> <path-to-datafile/s> [tag (optional)]"
+    echo ""
+    echo "    <path-to-metafile> String containing the full path of a directory"
+    echo "        which contains all the metafiles. The structure of the directory"
+    echo "        must be:"
+    echo "            - my.tv.show.2023.720p.WEB-DL.AAC2.0.H.264-metafiles"
+    echo "              |"
+    echo "              |- season"
+    echo "              |  |- xxx01.torrent"
+    echo "              |  |- xxx02.torrent"
+    echo "              |"
+    echo "              |- episodes"
+    echo "              |  |- xxxxx01.torrent"
+    echo "              |  |- xxxxx02.torrent"
+    echo "        For this example, the input argument will be:"
+    echo "        \"/path/to/my.tv.show.2023.720p.WEB-DL.AAC2.0.H.264-metafiles\""
+    echo ""
+    echo "    <path-to-datafile/s> String containing the full path of the directory"
+    echo "        containing the data/episode files. For the above example, it could be"
+    echo "        \"/path/to/my.tv.show.2023.720p.WEB-DL.AAC2.0.H.264\""
+    echo ""
+    echo "    <tag> Label for rutorrent in ashwini (optional, default=BTNarXiv)"
+    echo ""
+    [[ $exitcode == 0 ]] && exit 0 || exit 1
+}
+
+[[ "${1}" == "help" ]] && _show_help 0
+[[ "${1}" == "--help" ]] && _show_help 0
+[[ "${1}" == "-h" ]] && _show_help 0
+[[ $# -lt 2 ]] && _show_help 1 "This script requires at least two arguments. Only $# given."
+
 _METAPATH="${HOME}/${1}"
 _DATAPATH="${HOME}/${2}"
 _RUTORRENT_TAG="${3}"
