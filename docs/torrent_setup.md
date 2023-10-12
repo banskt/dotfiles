@@ -739,6 +739,35 @@ In the above, I used the `myconf.sh` which I wrote down with all the options tha
 
 I do not have AV1 support but I will do that later.
 
+### systemd control for Jellyfin
+
+I created the file `/lib/systemd/system/jellyfin@.service`:
+
+```ini
+[Unit]
+Description=Jellyfin for %i
+After=network.target
+
+[Service]
+Type=simple
+User=%i
+Group=%i
+Restart=on-failuer
+WorkingDirectory=/home/%i
+ExecStart=/bin/bash -c "/home/banskt/local/apps/scripts/jellyfin-launcher"
+#RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Starting the service:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl reset-failed
+sudo systemctl enable jellyfin@banskt
+sudo systemctl start jellyfin@banskt
+```
 
 ## Mount sshfs
 
