@@ -769,6 +769,58 @@ sudo systemctl enable jellyfin@banskt
 sudo systemctl start jellyfin@banskt
 ```
 
+**NOTE**: I could not make the Jellyfin client work on webOS with a SSL certificate.
+It works without SSL.
+
+## Emby Server
+
+The idea is to use the Emby deb package and extract it to to my desired location.
+```bash
+dpkg-deb --raw-extract emby-server-deb_4.7.14.0_amd64.deb emby-server-deb_4.7.14.0_amd64/
+```
+The package structure can now be examined in `emby-server-deb_4.7.14.0_amd64/`.
+The main program is installed in `/opt/emby-server`. 
+I move it there and make required changes
+in the executable `/opt/emby-server/bin/emby-server`.
+There are two main variables to be modified:
+```bash
+APP_DIR=/opt/emby-server
+EMBY_DATA=/home/banskt/local/etc/emby/data
+```
+and remove the `-updatepackage 'emby-server-deb_{version}_amd64.deb'` flag from the program.
+I do not like automatic updates.
+The `EMBY_DATA` can also be configured from `emby-server.conf`,
+which I did eventually and left the default `EMBY_DATA=/var/lib/emby`.
+The variables in `emby-server.conf` are loaded  into the runtime environmet
+by the the systemd control.
+If I am using the default `EMBY_DATA` in executable,
+then it is important to modify the environment variable 
+before launching the program.
+
+From the extracted directory, move relevant files to my custom locations:
+```bash
+mv emby-server-deb_4.7.14.0_amd64/etc/* ~/local/etc/emby/
+```
+
+I also want my user `minion` to run the app instead of creating another user `emby`.
+Modify the `usr/lib/systemd/system/emby-server@.service` from the extracted directory
+to specify the configuration file location.
+```ini
+EnvironmentFile=/home/banskt/local/etc/emby/emby-server.conf
+```
+Change file permissions so that `minion` has read/write access to `local/etc/emby`.
+
+Check if you can run the process from the `minion` user account. 
+Start and stop the process to create the necessary (default) configs.
+If everything works, start Emby server
+```bash
+sudo systemctl enable emby-server@minion
+sudo systemctl daemon-reload
+sudo systemctl reset-failed
+sudo systemctl start emby-server@minion
+sudo systemctl status emby-server@minion
+```
+
 ## Mount sshfs
 
 One of my frontend server does not provide root access. 
