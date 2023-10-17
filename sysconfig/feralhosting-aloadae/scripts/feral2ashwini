@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+source /media/sdt/banskt/.bashrc
 
 # Usage
 #     data-archive <config> <dirlist_file> [tag]
@@ -122,7 +123,8 @@ trap "rm -f ${TMP_ARCHIVE_TODO}" EXIT INT QUIT TERM
 
 if [[ "${_dirlist_file}" == "all" ]]; then
     _vlog "Preparing to archive all packs in ${ARCHIVE_SOURCE_DATAPATH}"
-	find ${ARCHIVE_SOURCE_DATAPATH}/ -maxdepth 1 -mindepth 1 -not -path "*.torrent" -printf "%f\n" | sort > ${TMP_ARCHIVE_TODO}
+	#find ${ARCHIVE_SOURCE_DATAPATH}/ -maxdepth 1 -mindepth 1 -not -path "*.torrent" -printf "%f\n" | sort > ${TMP_ARCHIVE_TODO}
+    rt-loaded ${ARCHIVE_SOURCE_DATAPATH} | sort > ${TMP_ARCHIVE_TODO}
     cp ${TMP_ARCHIVE_TODO} ~/debug-archive.txt
 else
 	if [[ ! -f "${_dirlist_file}" ]]; then 
@@ -157,6 +159,8 @@ function _ensure_rsync() {
         # somehow fails for escaped characters
         # rsync has a built in flag 
         # -s, --protect-args          no space-splitting; only wildcard special-chars
+        # I can also directly set the user group and permissions from rsync
+        # --chmod=D2774,F644 --chown=banskt:minion
         rsync -avz -s -q --partial --progress --append-verify --timeout=300 "${fsource}" "${ftarget}"
         local cmdstatus=$?
         if [[ ${cmdstatus} -eq 0 ]]; then
@@ -415,6 +419,11 @@ if [[ -d "${ARCHIVE_SOURCE_DATAPATH}/${target}" ]]; then
 fi
 done < ${TMP_ARCHIVE_TODO}
 #fi
+
+# =================================================
+# Set proper permissions for media server
+# =================================================
+ssh -n ashwini 'set-media-permission'
 
 # =================================================
 # Clean up temporary files

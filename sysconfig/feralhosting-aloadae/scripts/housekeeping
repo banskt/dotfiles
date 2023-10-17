@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+
+shopt -s expand_aliases
+source "${HOME}/.bashrc"
+
+dateflag=$( date +"%Y-%m-%d" )
+logdir="${HOME}/usr/log/housekeeping/${dateflag}"
+mkdir -p "${logdir}"
+
+# logfiles
+unregistered_logfile="${logdir}/remove-unregistered.log"
+orphan_logfile="${logdir}/remove-orphan.log"
+
+rt-error --delete --yes >> "${unregistered_logfile}" 2>&1
+
+tgtdir1="${HOME}/uploads/btn-packs"
+tgtdir2="${HOME}/uploads/btn-episodes"
+tgtdir3="${HOME}/downloads/btn-packs"
+tgtdir4="${HOME}/downloads/btn-spam"
+for tgt in "${tgtdir1}" "${tgtdir2}" "${tgtdir3}" "${tgtdir4}"; do
+    rt-orphan "${tgt}" | while read -r -d$'\n' fpath;
+    do
+        echo "${fpath}" >> "${orphan_logfile}"
+        rm -rf "${fpath}"
+    done
+done
