@@ -2,6 +2,11 @@
 
 source "${HOME}/.bashrc"
 
+my_scriptdir="/media/sdt/banskt/usr/scripts"
+source "${my_scriptdir}/logging-helpers.sh"
+source "${my_scriptdir}/rtcontrol-helpers.sh"
+
+
 if [[ -f "${HOME}/btn-autopack.cfg" ]]; then
     source "${HOME}/btn-autopack.cfg"
 else
@@ -32,47 +37,6 @@ fi
 _do_endscript() {
     echo "FAILED."
     exit 1
-}
-
-
-_is_debug() {
-    [[ "$DEBUG_FLAG" == 1 ]]   || return 1
-}
-
-
-_is_verbose() {
-    [[ "$VERBOSE_FLAG" == 1 ]] || return 1
-}
-
-
-function _filelog() {
-    msg="${@}"
-    echo "${msg}" | tee -a "${release_logfile}"
-    _dbglog "${msg}"
-}
-
-
-function _vlog() {
-    # this function always returns True
-    { _is_verbose && _filelog "${@}"; } || return 0
-}
-
-
-function _dbglog() {
-    # this function always returns True
-    # this cannot go into the logfile because
-    # we start debugging even before the logfile
-    # is defined.
-    { _is_debug && echo "${@}"; } || return 0
-}
-
-
-_is_metafile_ok() {
-    if [[ -f "${1}" ]]; then
-        lstor -qo __hash__ "${1}" | grep -q -v "Error" || return 1
-    else
-        return 1
-    fi  
 }
 
 
@@ -111,7 +75,7 @@ _download_metafile() {
     # If it is a download error (not a torrent file), remove. Keep otherwise.
     if [[ -f "${metafile}" ]]; then
         _dbglog "${metafile} exists."
-        _is_metafile_ok "${metafile}" || { _vlog "Error in metafile. Remove and download again." && rm -f "${metafile}"; }
+        _is_rt_metafile_ok "${metafile}" || { _vlog "Error in metafile. Remove and download again." && rm -f "${metafile}"; }
     fi
     #
     # The main download loop: 
@@ -125,7 +89,7 @@ _download_metafile() {
             curl -JL "${torrent_url}" -o "${metafile}" --silent
         fi
     fi
-    _is_metafile_ok "${metafile}" || return 1
+    _is_rt_metafile_ok "${metafile}" || return 1
 }
 
 
@@ -164,71 +128,6 @@ _wait_till_dl_complete() {
 		done
 		_vlog "    Number of complete downloads: ${#dl_complete_array[@]}"
 	done
-}
-
-
-#         x < 50MB  : 32kB 
-# 50MB  < x < 150MB : 64kB
-# 150MB < x < 350MB : 128kB
-# 350MB < x < 512MB : 256kB
-# 512MB < x < 1GB   : 512kB
-# 1GB   < x < 2GB   : 1024kB
-# 2GB   < x < 20GB  : 2048kB
-# 20GB  < x         : 4096kB
-# 
-# Chunk size higher than 4MB is known to cause issues with rTorrent. 
-# 
-_get_chunk_size() {
-
-    fname="${1}"
-    fsize_arr=()
-    if [[ -f "${fname}" ]]; then
-        fsize=$( du -sh "${fname}" | cut -f1 | numfmt --from=iec )
-        fsize_arr+=( "${fsize}" )
-    else
-        for f in "${fname}"/*; do
-            fsize=$( du -sh "${f}" | cut -f1 | numfmt --from=iec )
-            fsize_arr+=( "${fsize}" )
-        done
-    fi  
-
-    min_fsize=${fsize_arr[0]}
-    for i in "${fsize_arr[@]}"; do
-        [[ ${i} -lt ${min_fsize} ]] && min_fsize=${i}
-    done
-    ## min_fsize_readable=$( echo ${min_fsize} | numfmt --to=iec )
-    # convert filesize to MB
-    fsize=$( echo "${min_fsize}" | awk ' {$1/=1048576; printf "%0.2f",$1} ' | cut -d'.' -f1)
-
-    chunk_size="1024K"
-    if [[ "${fsize}" -lt 50 ]]; then
-        chunk_size="32K"
-    elif [[ "${fsize}" -lt 150 ]]; then
-        chunk_size="64K"
-    elif [[ "${fsize}" -lt 350 ]]; then
-        chunk_size="128K"
-    elif [[ "${fsize}" -lt 512 ]]; then
-        chunk_size="256K"
-    elif [[ "${fsize}" -lt 1024 ]]; then
-        chunk_size="512K"
-    elif [[ "${fsize}" -lt 2048 ]]; then
-        chunk_size="1024K"
-    elif [[ "${fsize}" -lt 20480 ]]; then
-        chunk_size="2048K"
-    else
-        chunk_size="4096K"
-    fi  
-
-    echo ${chunk_size}
-}
-
-
-_get_chunk_length() {
-    local size
-    local length
-    size=$( numfmt --from=iec "${1}" )
-    length=$( echo "l($size)/l(2)" | bc -l | cut -d'.' -f1 )
-    echo "${length}"
 }
 
 
@@ -306,7 +205,7 @@ _dbglog "${release_name}"
 # create directories if required
 #
 mkdir -p "${BTN_AUTOPACK_LOGDIR}/${dateflag}"
-release_logfile="${BTN_AUTOPACK_LOGDIR}/${dateflag}/${release_name}.log"
+SB_BASHLOG_FILE="${BTN_AUTOPACK_LOGDIR}/${dateflag}/${release_name}.log"
 release_tempdir=$( mktemp --tmpdir="${BTN_AUTOPACK_TMPDIR}" -d "${release_name}".XXX )
 # double quotes expands now rather than when signalled
 trap "rm -rf ${release_tempdir}" EXIT INT QUIT TERM
@@ -375,8 +274,8 @@ done
 
 # Create torrent file using mktorrent
 _filelog "Creating torrent file."
-chunk_size=$( _get_chunk_size "${packdir_path}" )
-chunk_length=$( _get_chunk_length "${chunk_size}" )
+chunk_size=$( _get_rt_chunk_size "${packdir_path}" )
+chunk_length=$( _get_rt_chunk_length "${chunk_size}" )
 targetpath="${BTN_STAGING_DIR}/${release_name}.torrent"
 [[ -f "${targetpath}" ]] && rm -f "${targetpath}"
 _filelog "Calculated chunk size: ${chunk_size} | chunk piece length: ${chunk_length}"
