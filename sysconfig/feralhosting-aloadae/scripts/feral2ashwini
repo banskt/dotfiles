@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-source /media/sdt/banskt/.bashrc
-
 # Usage
 #     data-archive <config> <dirlist_file> [tag]
 # Arguments
@@ -25,23 +23,44 @@ source /media/sdt/banskt/.bashrc
 #     https://stackoverflow.com/q/673055
 #
 #
+my_scriptdir="${HOME}/usr/scripts"
+my_logdir="${HOME}/usr/log/archive"
+my_tmpdir="${HOME}/usr/tmp/archive"
+my_configdir="${HOME}/usr/archive-config"
+
+source "${HOME}/.bashrc"
+source "${my_scriptdir}/logging-helpers.sh"
+source "${my_scriptdir}/rtcontrol-helpers.sh"
+source "${my_scriptdir}/rsync-helpers.sh"
 
 # =================================================
-# Logging functions
+# Fixed arguments
 # =================================================
-function _mlog() {
-    echo "${@}" >> ${LOGFILE}
+dateflag=$( date +"%Y-%m-%d" )
+randflag=$( cat /dev/urandom | tr -cd 'a-z0-9' | head -c 6 )
+
+VERBOSE_FLAG=1
+DEBUG_FLAG=0
+
+SB_BASHLOG_FILE="${my_logdir}/${dateflag}/action.${randflag}.log"
+SB_ARCHIVE_FILE="${my_logdir}/${dateflag}/archivelist.${randflag}.log"
+mkdir -p "$( dirname "${SB_BASHLOG_FILE}" )"
+
+# =================================================
+# Help function
+# =================================================
+_do_endscript() {
+    echo "FAILED."
+    exit 1
 }
 
-function _vlog() {
-    { _is_verbose && echo "${@}"; } || return 0
+_datefmt() {
+    date +'%Y-%m-%d %H:%M:%S'
 }
 
-function _is_verbose() {
-    [[ "$VERBOSE_FLAG" == 1 ]] || return 1
-}
 
 _show_help() {
+    local exitcode
     exitcode=${1}
     if [[ ! -z "${2}" ]]; then
         echo "Error: ${2}"
@@ -54,16 +73,18 @@ _show_help() {
 	echo "The source and target paths are hardcoded in the <config>"
     echo "Currently this script only works on moving directories specified"
     echo "in the config file." 
-    echo "    dirlist:  path of a file containing the list of directories"
-    echo "              which should be archived. These directories must be"
+    echo "    dirlist:  path of a file containing the list of files/directories"
+    echo "              which should be archived. These files/directories must be"
     echo "              available in the source path specified in the config."
-    echo "              Hint: use 'all' for archiving all directories from the"
-    echo "              source path"
+    echo "              Special flags:"
+    echo "              - 'all'      : download completed files/directories"
+    echo "              - 'inactive' : inactive for last 6 hours"
     echo "    config:   configuration file located in ~/usr/archive-config/<config>.cfg"
     echo "              Source configurations include:"
-    echo "              - 'tv' : ~/downloads/tv"
+    echo "              - 'tv'        : ~/downloads/tv"
+    echo "              - 'btn-spam'  : ~/downloads/btn-spam"
     echo "              - 'btn-packs' : ~/uploads/btn-packs"
-    echo "    tag:      Label for rutorrent in ashwini (optional, default=BTNarXiv)"
+    echo "    tag:      Label for rutorrent in ashwini (optional)"
     echo ""
     [[ $exitcode == 0 ]] && exit 0 || exit 1
 }
@@ -72,32 +93,16 @@ _show_help() {
 # =================================================
 # Input arguments
 # =================================================
-_dirlist_file="${1}"
-_config_name="${2}"
-_archive_rt_tag="${3}"
-
-
-# =================================================
-# Fixed arguments
-# =================================================
-VERBOSE_FLAG=1
-RTORRENT_SESSION_DIR="${HOME}/private/rtorrent/work"
-LOCAL_TMPDIR="${HOME}/usr/tmp/archive"
-LOGFILE="${HOME}/usr/logs/feral2ashwini.log"
+dirlist_file="${1}"
+config_name="${2}"
+archive_rt_tag="${3}"
 
 
 # =================================================
 # Process input, check errors
 # =================================================
-if [[ -z "${_config_name}" ]] || [[ -z "${_dirlist_file}" ]]; then
-	errmsg="Wrong arguments for this command. Please check usage."
-	_show_help 1 "${errmsg}"
-fi
-
-# We need a local temporary directory before anything else
-if [[ ! -d ${LOCAL_TMPDIR} ]]; then
-    _mlog "$( date ) : Directory ${LOCAL_TMPDIR} does not exist." 
-    mkdir -p ${LOCAL_TMPDIR} || exit 1
+if [[ -z "${config_name}" ]] || [[ -z "${dirlist_file}" ]]; then
+	_show_help 1 "Wrong arguments for this command. Please check usage."
 fi
 
 # From the configuration file,
@@ -106,78 +111,64 @@ fi
 # ARCHIVE_SOURCE_DATAPATH
 # ARCHIVE_TARGET_DATAPATH
 # ARCHIVE_TARGET_METAPATH
-# TO_REMOVE_FILE
 #
-if [[ -f "${HOME}/usr/archive-config/${_config_name}.cfg" ]]; then
-    source ${HOME}/usr/archive-config/${_config_name}.cfg
+if [[ -f "${my_configdir}/${config_name}.cfg" ]]; then
+    source "${my_configdir}/${config_name}.cfg"
 else
-    errmsg="Configuration file ${HOME}/usr/archive-config/${_config_name}.cfg not found. Exiting."
-    _show_help 1 "${errmsg}"
+    _show_help 1 "Configuration file ${my_configdir}/${config_name}.cfg not found. Exiting."
 fi
+
+# We need a local temporary directory before anything else
+# tempdir=$( mktemp --tmpdir="${my_tmpdir}" -d "${config_name}".XXX )
+# double quotes expands now rather than when signalled
+# trap "rm -rf ${tempdir}" EXIT INT QUIT TERM
+# As of now do not remove temporary directory / debug required
+tempdir="${my_tmpdir}/${config_name}.${randflag}"
+mkdir -p "${tempdir}"
 
 # Get the dirlist file
 # create a temporary file to keep a copy of the input file
 #
-TMP_ARCHIVE_TODO=$( mktemp --tmpdir="${LOCAL_TMPDIR}" arxivfiles.XXX.txt )
-trap "rm -f ${TMP_ARCHIVE_TODO}" EXIT INT QUIT TERM
+tempfile_targetlist=$( mktemp --tmpdir="${tempdir}" targetlist.XXX.txt )
+trap "rm -f ${tempfile_targetlist}" EXIT INT QUIT TERM
 
-if [[ "${_dirlist_file}" == "all" ]]; then
-    _vlog "Preparing to archive all packs in ${ARCHIVE_SOURCE_DATAPATH}"
-	#find ${ARCHIVE_SOURCE_DATAPATH}/ -maxdepth 1 -mindepth 1 -not -path "*.torrent" -printf "%f\n" | sort > ${TMP_ARCHIVE_TODO}
-    rt-loaded ${ARCHIVE_SOURCE_DATAPATH} | sort > ${TMP_ARCHIVE_TODO}
-    cp ${TMP_ARCHIVE_TODO} ~/debug-archive.txt
-else
-	if [[ ! -f "${_dirlist_file}" ]]; then 
-		errmsg="Input file ${_dirlist_file} not found. Exiting"
-		_show_help 1 "${errmsg}"
+function _unique_relative_input() {
+    while read -r -d$'\n' fpath
+    do 
+        echo "$( realpath "${fpath}" --relative-to="${ARCHIVE_SOURCE_DATAPATH}" )"
+    done | sort | uniq 
+}
+
+if [[ "${dirlist_file}" == "all" ]]; then
+    _filelog "$( _datefmt ) : Archive all completed data in ${ARCHIVE_SOURCE_DATAPATH}"
+    rt-completed "${ARCHIVE_SOURCE_DATAPATH}" | _unique_relative_input > "${tempfile_targetlist}"
+	if grep -q "/" "${tempfile_targetlist}"; then
+		_filelog "$( _datefmt ) : ERROR. 'all' flag cannot handle subdirectories. Provide explicit directory list file."
+		exit 1
 	fi
-	_vlog "Preparing to archive packs specified in ${_dirlist_file}"
-	cat "${_dirlist_file}" > "${TMP_ARCHIVE_TODO}"
-fi
-
-# Some other temporary files to use
 #
-TMP_HASH_INFO=$( mktemp --tmpdir="${LOCAL_TMPDIR}" hash2name.XXX.txt )
-trap "rm -f ${TMP_HASH_INFO}" EXIT INT QUIT TERM
+elif [[ "${dirlist_file}" == "inactive" ]]; then
+    _filelog "$( _datefmt ) : Archive all completed and inactive data in ${ARCHIVE_SOURCE_DATAPATH}"
+    rt-completed-inactive "${ARCHIVE_SOURCE_DATAPATH}" | _unique_relative_input > "${tempfile_targetlist}"
+	if grep -q "/" "${tempfile_targetlist}"; then
+		_filelog "$( _datefmt ) : ERROR. 'inactive' flag cannot handle subdirectories. Provide explicit directory list file."
+		exit 1
+	fi
+#
+else
+	if [[ ! -f "${dirlist_file}" ]]; then 
+		_show_help 1 "Input file ${dirlist_file} not found. Exiting."
+	fi
+	_filelog "$( _datefmt ) : Archive data specified in ${dirlist_file}"
+	cat "${dirlist_file}" > "${tempfile_targetlist}"
+fi
 
 # =================================================
 # useful functions, snippets
 # =================================================
 
-# ashwini / feral can have dodgy connections
-# ensure that the rsync works
-# Example usage:
-#     _ensure_rsync source_file ashwini:target_file
-#     _ensure_rsync "source_file\ with\ spaces" "ashwini:target_file\ with\ spaces"
-#
-function _ensure_rsync() {
-    local fsource="${1}"
-    local ftarget="${2}"
-    local retry_count=0
-    while [ true ]
-    do
-        # somehow fails for escaped characters
-        # rsync has a built in flag 
-        # -s, --protect-args          no space-splitting; only wildcard special-chars
-        # I can also directly set the user group and permissions from rsync
-        # --chmod=D2774,F644 --chown=banskt:minion
-        rsync -avz -s -q --partial --progress --append-verify --timeout=300 "${fsource}" "${ftarget}"
-        local cmdstatus=$?
-        if [[ ${cmdstatus} -eq 0 ]]; then
-            # rsync successful
-            _mlog "$( date ) : rsync success | ${fsource}"
-            return 0
-        else
-            retry_count=$(( ${retry_count} + 1  ))
-            _mlog "$( date ) : rsync fail | ${fsource}"
-            _mlog "$( date ) : exit code ${cmdstatus} | backoff and retry ${retry_count}"
-        fi
-        sleep 5
-    done
-}
-
 # ensure directory is created in remote before transfer
-# should wait until connectio is available
+# should wait until connection is available
 #
 # By default, ssh reads from stdin.
 # therefore it will consume the rest of the code
@@ -190,184 +181,179 @@ function _ensure_rsync() {
 # 
 function _ensure_remote_dir() {
     # take care of whitespace in directory name
-    printf -v target %q "${@}"
-    local retry_count=0
+    local target
+    local retry_count
+    local cmdstatus
+    target=$( printf '%q' "${1}" )
+    retry_count=0
     while [ true ]
     do
-        #ssh -n ashwini 'mkdir -p "'${ARCHIVE_TARGET_DATAPATH}'"/"'${target}'"'
-        ssh -n ashwini "mkdir -p ${ARCHIVE_TARGET_DATAPATH}/${target}"
-        local cmdstatus=$?
+        ssh -n ashwini "mkdir -p ${target}"
+        cmdstatus=$?
         if [[ ${cmdstatus} -eq 0 ]]; then
-            _mlog "$( date ) : ${target} | remote directory created"
+            _filelog "$( _datefmt ) : Remote directory created | ashwini:${target}"
             return 0 
         else
             retry_count=$(( ${retry_count} + 1  ))
-            _mlog "$( date ) : ${target} | remote directory creation failed"
-            _mlog "$( date ) : exit code ${cmdstatus} | backoff and retry ${retry_count}"
+            _filelog "$( _datefmt ) : ERROR in creating remote directory | ashwini:${target}"
+            _filelog "$( _datefmt ) : exit code ${cmdstatus} | backoff and retry ${retry_count}"
         fi
         sleep 5
     done
 }
 
-# do not rsync whole directory at once due to dodgy connection
-# break stuff into single transfers,
-# so it is easier to debug / restart if something goes wrong
-#
-function _ensure_recursive_archive() {
-    # take care of whitespace in directory name
-    #printf -v target %q "${@}"
-    # `find` does not require escaping
-    # just put everything in quotes 
-    # (otherwise `find` will escape the escaping characters,
-    # (e.g. john\'s --> john\\'s)
-    local target="${1}"
-    local sourcepath="${ARCHIVE_SOURCE_DATAPATH}/${target}"
 
-    _vlog "Name of season pack: ""${target}"
-    _vlog "Source path: ""${sourcepath}"
-    _vlog "    ------------------------------------"
-    # the results of find can have white space, never loop over them
-    # the following solution will still fail for newline characters in filename
-    # but that is an extremely rare case
-    #    https://stackoverflow.com/q/9612090
-    find "${sourcepath}/" -maxdepth 1 -mindepth 1 -print0 | while read -r -d $'\0' fpath
+# ensure all metafiles for a target path
+# are collected from rtorrent
+# 
+# Usage:
+#     _collect_metafiles <datapath> <metapath>
+#         where <datapath> can be a file or directory.
+#
+function _collect_metafiles() {
+    local datapath
+    local data_parentdir
+    local escaped_datapath
+    local metapath
+    local rt_session_dir
+    local mhash
+    local fpath
+    local relpath
+    local rtmpath
+    datapath="${1%/}" # remove slash from end of path, if present
+    metapath="${2%/}" # remove slash from end of path, if present
+    rt_session_dir=$( realpath "$( rtxmlrpc session.path )" )
+
+    # clean up any existing directory from previous / failed runs
+    # start fresh every time
+    [[ -d "${metapath}" ]] && rm -rf "${metapath}"
+    mkdir -p "${metapath}"
+    touch "${metapath}/info.txt" # empty file in case there's no data
+
+    # list all torrents in rtorrent session in the given path
+	data_parentdir=$( dirname "${datapath}" )
+    # escape special characters
+    # replace special characters with dot for pattern matching
+    # ** Important **
+    # This is required because some special characters like ,!&
+    # are not handled in pyrocore (rtcontrol).
+	escaped_datapath=$( printf '%q' "${datapath}" | sed 's/\\././g' )
+    _dbglog "Escaped Path: ${escaped_datapath}"
+	rtcontrol -qo 'hash,path' path='/^'"${escaped_datapath}"'.*$/' | while read -r -d$'\n' rtinfo
     do
-        # need the basename for creating remotepath
-        fbasepath="$( basename "${fpath}" )"
-        # Escaping characters for rsync did not work
-        # An elegant solution was to use the -s flag for rsync
-        #printf -v localpath %q "${fpath}"
-        #printf -v remotepath %q "${ARCHIVE_TARGET_DATAPATH}/${target}/${fbasepath}"
-        localpath="${fpath}"
-        remotepath="${ARCHIVE_TARGET_DATAPATH}/${target}/${fbasepath}"
-        _vlog "    Archive ${localpath}"
-        _vlog "    Target  ${remotepath}"
-        _vlog "    ------------------------------------"
-        _ensure_rsync "${localpath}" "ashwini:${remotepath}"
+        mhash=$( echo "${rtinfo}" | cut -f1 )
+        _dbglog "Hash: ${mhash}"
+        fpath=$( echo "${rtinfo}" | cut -f2 )
+        _dbglog "Path to data: ${fpath}"
+        # we need the relative path to load properly in the remote machine
+        relpath=$( realpath "${fpath}" --relative-to="${data_parentdir}" )
+        _dbglog "Relative path to data: ${relpath}"
+        # find the torrent from the session directory
+        rtmpath="${rt_session_dir}"/"${mhash}.torrent"
+        _dbglog "Path to metafile: ${rtmpath}"
+        # Force copy in the metafile storage
+        cp -f "${rtmpath}" "${metapath}/"
+        # Store the information in a separate file
+        echo -e "${mhash}\t${relpath}" >> "${metapath}/info.txt"
     done
+    sleep 1
+
+    # wait for files to copy
+    # Note the single quotes around file expression to stop bash expanding wildcards.
+    local n_copied
+    local n_count
+    n_copied=$( find "${metapath}/" -type f -name '*.torrent' | wc -l )
+    n_count=$( wc -l < "${metapath}/info.txt" ) 
+    while [[ "${n_copied}" -ne "${n_count}" ]]
+    do
+        sleep 1
+        n_copied=$( find "${metapath}/" -type f -name '*.torrent' | wc -l )
+    done
+    _filelog "$( _datefmt ) : Collected ${n_count} torrent metafile(s) for ${datapath}"
 }
 
 
 function _transfer_metafiles() {
-    local target="${1}"
-    local metadir="${LOCAL_TMPDIR}/${target}"
-    local sourcepath="${ARCHIVE_SOURCE_DATAPATH}/${target}"
-    _vlog "    Collecting torrent metafiles."
-    _vlog "    Storing in ${metadir}"
-
-    # clean up any existing directory from previous / failed runs
-    [[ -d ${metadir} ]] && rm -rf ${metadir}
-    mkdir -p "${metadir}/season" "${metadir}/episodes"
-
-    # list all season torrents in rtorrent session
-    grep -F "${target}" ${TMP_HASH_INFO} >> "${metadir}/season.hash.txt"
-
-    # list all episode torrents in rtorrent session
-    find "${sourcepath}/" -type f -print0 | while read -r -d $'\0' fpath
-    do
-        local fbasepath="$( basename "${fpath}" )"
-        grep -F "${fbasepath}" ${TMP_HASH_INFO} >> "${metadir}/episodes.hash.txt"
-    done
-    # One time, the grep returned all torrent files many times over.
-    # I am adding a check to ensure that the number of files
-    # listed in the text files is not abnormal.
-    # Abort if that happens and wait for human intervention
     #
-    # collect all season torrents
-    if [[ -f "${metadir}/season.hash.txt" ]]; then
-        local season_count=$( wc -l "${metadir}/season.hash.txt" | cut -f1 -d' ' )
-        [[ "${season_count}" -gt 50 ]] && { echo "Too many torrent files, please check manually." && return 1; }
-        while read -r line; do
-            local _hash=$( echo $line | cut -f1 -d' ' )
-            local _hashfile="${RTORRENT_SESSION_DIR}/${_hash}.torrent"
-            [[ -f "${_hashfile}" ]] && cp "${_hashfile}" "${metadir}/season/"
-        done < "${metadir}/season.hash.txt"
-    fi
-    #
-    # collect all episode torrents
-    if [[ -f "${metadir}/episodes.hash.txt" ]]; then
-        local episode_count=$( wc -l "${metadir}/episodes.hash.txt" | cut -f1 -d' ' )
-        [[ "${episode_count}" -gt 200 ]] && { echo "Too many torrent files, please check manually." && return 1; }
-        while read -r line; do
-            local _hash=$( echo $line | cut -f1 -d' ' )
-            local _hashfile="${RTORRENT_SESSION_DIR}/${_hash}.torrent"
-            [[ -f "${_hashfile}" ]] && cp "${_hashfile}" "${metadir}/episodes/"
-        done < "${metadir}/episodes.hash.txt"
-    fi
-    # sync # wait for files to copy
-    # another way is to loop over them
-    _vlog "    Looking for torrent files in ${metadir}/"
-    local copied_season=0
-    local copied_episode=0
-    while [[ "${copied_season}" -ne "${season_count}" ]] && [[ "${copied_episode}" -ne "${episode_count}" ]]
-    do
-        # Note the single quotes around file expression to stop bash expanding wildcards.
-        copied_season=$( find "${metadir}/season/" -type f -name '*.torrent' | wc -l )
-        copied_episode=$( find "${metadir}/episodes/" -type f -name '*.torrent' | wc -l )
-        sleep 1
-    done
-    #
-    # send this directory to ashwini
-    if [[ "${season_count}" -eq 0 ]] && [[ "${episode_count}" -eq 0 ]]; then
-        _vlog "    Could not find any torrent file in ${metadir}/"
-        _mlog "$( date ) : ${target} | no torrent files found from session"
+    # send the directory to ashwini
+	# wrapper for _ensure_rsync to check if there are any actual metafiles
+	local metapath
+	local remotepath
+    local n_count
+	metapath="${1}" 
+	remotepath="${2}"
+	n_count=$( cat "${metapath}/info.txt" | wc -l )
+    _filelog "$( _datefmt ) : Sending metafiles to remote archive."
+	if [[ "${n_count}" -eq 0 ]]; then
+        _filelog "$( _datefmt ) : ERROR | No torrent files in session for $( basename "${metapath}" )"
         return 1
     else
-        _vlog "    Send metafiles to remote archive."
-        _ensure_rsync "${metadir}" "ashwini:${ARCHIVE_TARGET_METAPATH}/"
-        return 0
+        _ensure_rsync "${metapath}" "${remotepath}" && return 0 || return 1
     fi
 }
 
-
+#
 # allow loading rtorrent to remote client to fail with dodgy connections
-function _load_remote_rt() {
-    # name of the file / directory can have spaces
-    #printf -v target %q "${@}"
-    local target="${1}"
-    local metapath="${ARCHIVE_TARGET_METAPATH}/${target}"
-    local datapath="${ARCHIVE_TARGET_DATAPATH}/${target}"
-    _vlog "    Load torrents in remote client."
-    echo "Waiting for response from remote machine ..."
-    ssh -n ashwini 'loadtorrents "'${metapath}'" "'${datapath}'" "'${_archive_rt_tag}'"'
-    echo ""
-}
+# function _load_remote_rt() {
+#     # name of the file / directory can have spaces
+#     #printf -v target %q "${@}"
+#     local target="${1}"
+#     local metapath="${ARCHIVE_TARGET_METAPATH}/${target}"
+#     local datapath="${ARCHIVE_TARGET_DATAPATH}/${target}"
+#     _vlog "    Load torrents in remote client."
+#     echo "Waiting for response from remote machine ..."
+#     ssh -n ashwini 'loadtorrents "'${metapath}'" "'${datapath}'" "'${archive_rt_tag}'"'
+#     echo ""
+# }
 
 
-function _delete_from_client_allfiles_in_dir() {
-    local metadir="${1}"
-    find "${metadir}/" -regextype sed -regex '^'${metadir}'/[0-9a-fA-F]\{40\}\.torrent' -type f -print0 | while read -r -d $'\0' metapath
-    do
-        fname="$( basename ${metapath} )"
-        _hash=${fname%.torrent}
-        _vlog "    Remove from client $_hash | ${fname}"
-        rtcontrol hash=${_hash} --quiet --delete --yes
-    done
-}
+function _load_remote_client() {
+	local metapath
+	local datapath
+	local rt_tag
+	metapath="${1}"
+	datapath="${2}"
+	rt_tag="${3}"
+	_filelog "$( _datefmt ) : Loading metafiles in remote client"
+	ssh -n ashwini 'loadtorrents "'${metapath}'" "'${datapath}'" "'${rt_tag}'"' | \
+        while read -r remote_response
+        do 
+            _filelog "    [ashwini: $(date +'%H:%M:%S')] ${remote_response}"
+        done
+}	
 
 
-function _clean_local_rt() {
-    local target="${1}"
-    local metadir="${LOCAL_TMPDIR}/${target}"
-    ## Remove episodes before season
-    _delete_from_client_allfiles_in_dir "${metadir}/episodes"
-    _delete_from_client_allfiles_in_dir "${metadir}/season"
+function _clean_local_client() {
+    local metapath
+    local rtinfo
+    local mhash
+    local fpath
+    metapath="${1%/}"
+	while read -r rtinfo
+	do
+		mhash=$( echo "${rtinfo}" | cut -f1 )
+		fpath=$( echo "${rtinfo}" | cut -f2 )
+        _filelog "$( _datefmt ) : Removing torrent from client | ${fpath}"
+		rtcontrol 'hash='"${mhash}" --quiet --delete --yes
+	done < "${metapath}/info.txt"
 }
 
 
 function _clean_local_data() {
-    local to_remove="${ARCHIVE_SOURCE_DATAPATH}/${1}"
-    echo "${to_remove}" >> "${TO_REMOVE_FILE}"
+    local sourcepath
+    sourcepath="${1}"
+    _filelog "$( _datefmt ) : Removing data from disk | ${sourcepath}"
+    rm -rf "${sourcepath}"
     _vlog "    =============================================="
     _vlog "    Archive complete."
-    _vlog "    Remove ${to_remove}"
-    _vlog "    But this script is beta, so deletely manually."
+    _vlog "    Cleaned ${sourcepath}"
     _vlog "    =============================================="
     _vlog ""
 }
 
+
 function _get_announce_domain() {
-    echo $( lstor -qo announce ${1} | sed -e 's/[^/]*\/\/\([^@]*@\)\?\([^:/]*\).*/\2/' )
+    echo "$( lstor -qo announce "${1}" | sed -e 's/[^/]*\/\/\([^@]*@\)\?\([^:/]*\).*/\2/' )"
 }
 
 
@@ -375,58 +361,63 @@ function _get_announce_domain() {
 # MAIN PROCESS STARTS HERE
 # #################################################
 
-# =================================================
-# Map hash to file names for easy access
-# =================================================
-_vlog "Collecting hash information from torrent metafiles."
-rtcontrol -qo hash,name \* >> ${TMP_HASH_INFO}
-#find "${RTORRENT_SESSION_DIR}/" -regextype sed -regex '^'${RTORRENT_SESSION_DIR}'/[0-9a-fA-F]\{40\}\.torrent' -type f -print0 | while read -r -d $'\0' metafile
-#do
-#    lstor -qo __hash__,info.name ${metafile} >> ${TMP_HASH_INFO}
-#done
-
+remotehost="ashwini"
+remotepath="${ARCHIVE_TARGET_DATAPATH}"
+remote_metapath="${ARCHIVE_TARGET_METAPATH}"
 
 # =================================================
 # Loop over directories
 # =================================================
 #if false; then # <-- my debug hack
 while read -r target; do
-if [[ -d "${ARCHIVE_SOURCE_DATAPATH}/${target}" ]]; then
-    echo "Archiving ${target}"
+	localpath="${ARCHIVE_SOURCE_DATAPATH}/${target}"
+	local_metapath="${tempdir}/metafiles/${target}"
+
+	_filelog "$( _datefmt ) : Archive | ${localpath}"
+	_filelog "$( _datefmt ) : Destination | ${remotehost}:${remotepath}"
     #
-    # Create remote directory
-	if ( _ensure_remote_dir "${target}" ); then
-        #
-	    # transfer downloaded files
-	    if ( _ensure_recursive_archive "${target}" ); then
-            #
-	        # trasnfer torrent meta files
-	        # add torrent files to ashwini rtorrent client
-	        { _transfer_metafiles "${target}" && _load_remote_rt "${target}"; } \
-                || _mlog "$( date ) : ${target} | Error in loading torrents in ashwini"
-            #
-	        # remove torrents from local rtorrent client
-            # clean data from local site
-	        { _clean_local_rt "${target}" && \
-                _mlog "$( date ) : ${target} | Local torrents removed" && \
-                _clean_local_data "${target}" && \
-                _mlog "$( date ) : ${target} | Local data removed";
-            } || _mlog "$( date ) : ${target} | Error in cleaning local data"
-	    fi
-	else
-	    _mlog "$( date ) : ${target} | Error Could not create target path in ashwini"
-	fi
-fi
-done < ${TMP_ARCHIVE_TODO}
+    # Do the file/directory exist?
+    if [[ ! -e "${localpath}" ]]; then
+        _filelog "$( _datefmt ) : ERROR No such file or directory ${localpath}"
+        continue
+    fi
+	#
+	# create remote directory where the file will be transferred
+	_ensure_remote_dir "${remotepath}" || continue
+
+	#
+	# transfer all files in 'target'
+	_ensure_recursive_rsync "${localpath}" "${remotehost}:${remotepath}" || continue
+
+	#
+	# transfer all metafiles for 'target'
+	_collect_metafiles  "${localpath}" "${local_metapath}" || continue
+	_transfer_metafiles "${local_metapath}" "${remotehost}:${remote_metapath}/" || continue
+
+	#
+	# load metafiles in remote 
+	_load_remote_client "${remote_metapath}/${target}" "${remotepath}" "${archive_rt_tag}" || continue
+
+	#
+	# cleanup local client
+	_clean_local_client "${local_metapath}" || continue
+	_clean_local_data   "${localpath}" || continue
+    #
+    # write to logfile
+    echo "${localpath}" >> "${SB_ARCHIVE_FILE}"
+	
+
+done < "${tempfile_targetlist}"
 #fi
 
 # =================================================
 # Set proper permissions for media server
 # =================================================
-ssh -n ashwini 'set-media-permission'
+#ssh -n ashwini 'set-media-permission'
 
 # =================================================
 # Clean up temporary files
 # =================================================
-rm -f ${TMP_HASH_INFO}
-rm -f ${TMP_ARCHIVE_TODO}
+# rm -f ${tempfile_hashinfo}
+# rm -f "${tempfile_targetlist}"
+# rm -rf "${tempdir}"
