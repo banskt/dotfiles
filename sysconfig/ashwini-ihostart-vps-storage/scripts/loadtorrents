@@ -1,56 +1,7 @@
 #!/usr/bin/env bash
 
-_show_help() {
-    exitcode=${1}
-    if [[ ! -z "${2}" ]]; then
-        echo "Error: ${2}"
-        echo ""
-    fi
-    local myname=$( basename $0 )
-    echo "${myname}: load torrents from an archive metafile directory"
-    echo "Usage:"
-    echo "    ${myname} <path-to-metafile> <path-to-datafile/s> [tag (optional)]"
-    echo ""
-    echo "    <path-to-metafile> String containing the full path of a directory"
-    echo "        which contains all the metafiles. The structure of the directory"
-    echo "        must be:"
-    echo "            - my.tv.show.2023.720p.WEB-DL.AAC2.0.H.264-metafiles"
-    echo "              |"
-    echo "              |- season"
-    echo "              |  |- xxx01.torrent"
-    echo "              |  |- xxx02.torrent"
-    echo "              |"
-    echo "              |- episodes"
-    echo "              |  |- xxxxx01.torrent"
-    echo "              |  |- xxxxx02.torrent"
-    echo "        For this example, the input argument will be:"
-    echo "        \"/path/to/my.tv.show.2023.720p.WEB-DL.AAC2.0.H.264-metafiles\""
-    echo ""
-    echo "    <path-to-datafile/s> String containing the full path of the directory"
-    echo "        containing the data/episode files. For the above example, it could be"
-    echo "        \"/path/to/my.tv.show.2023.720p.WEB-DL.AAC2.0.H.264\""
-    echo ""
-    echo "    <tag> Label for rutorrent in ashwini (optional, default=BTNarXiv)"
-    echo ""
-    [[ $exitcode == 0 ]] && exit 0 || exit 1
-}
-
-[[ "${1}" == "help" ]] && _show_help 0
-[[ "${1}" == "--help" ]] && _show_help 0
-[[ "${1}" == "-h" ]] && _show_help 0
-[[ $# -lt 2 ]] && _show_help 1 "This script requires at least two arguments. Only $# given."
-
-_METAPATH="${HOME}/${1}"
-_DATAPATH="${HOME}/${2}"
-_RUTORRENT_TAG="${3}"
-
-if [[ -z "${_RUTORRENT_TAG}" ]]; then
-    _RUTORRENT_TAG="BTNarXiv"
-fi
-PACKNAME="$( basename ${_METAPATH} )"
-
-VERBOSE_FLAG=1
-DEBUG_FLAG=1
+VERBOSE_FLAG=0
+DEBUG_FLAG=0
 
 function _is_verbose() {
     [[ "$VERBOSE_FLAG" == 1 ]] || return 1
@@ -69,6 +20,36 @@ function _vlog() {
 
 function _dbglog() {
     { _is_debug && echo "${@}"; } || return 0
+}
+
+
+_show_help() {
+    local exitcode
+    local myname
+    exitcode=${1}
+    if [[ ! -z "${2}" ]]; then
+        echo "Error: ${2}"
+        echo ""
+    fi
+    myname=$( basename "${0}" )
+    echo "${myname}: load torrents from an archive metafile directory"
+    echo "Usage:"
+    echo "    ${myname} <path-to-metafile> <path-to-datafile/s> [tag (optional)]"
+    echo ""
+    echo "    <path-to-metafile> String containing the full path of a directory"
+    echo "        which contains all the metafiles and a info.txt file with"
+    echo "        information regarding relative data path."
+    echo "        e.g. <hash>    /example/movie"
+    echo "        This is added at the end of <path-to-datafile>"
+    echo ""
+    echo "    <path-to-datafile/s> String containing the full path of the directory"
+    echo "        containing the data files. For the above example, it could be"
+    echo "        \"/path/to/all/movies\""
+    echo "        The inferred path will be /path/to/all/movies/example/movie"
+    echo ""
+    echo "    <tag> Label for rutorrent in ashwini (optional, default=BTNarXiv)"
+    echo ""
+    [[ "${exitcode}" == 0 ]] && exit 0 || exit 1
 }
 
 ## Load a torrent with a specified download directory, 
@@ -97,27 +78,33 @@ function _dbglog() {
 ##
 function _load_single_torrent() {
     # full path of the torrent file
-    local metapath="${1}"
-    # directory where the data can be found
-    local rt_datapath="${2}"
+    local metapath
+    metapath="${1}"
+    # full path of the data file/directory
+    local datapath
+    datapath="${2}"
+    # parent directory where the data can be found
+    local rt_datapath
+    rt_datapath=$( dirname "${datapath}" )
     # tag for the entry
-    local rt_tag="${3}"
+    local rt_tag
+    rt_tag="${3}"
     # a new file for the fast resume information
-    local fastpath="${metapath%.torrent}.chtor_fastresume.torrent"
+    local fastpath
+    fastpath="${metapath%.torrent}.chtor_fastresume.torrent"
     # name of the data file
-    local fname="$( lstor -qo info.name ${metapath} )"
-    # full path of the data file
-    local datapath="${rt_datapath}/${fname}"
+    local fname
+    fname=$( lstor -qo info.name "${metapath}" )
 
     _dbglog "  Loading single torrent."
-    _dbglog "    metapath: ${metapath}"
-    _dbglog "    datadir: ${rt_datapath}"
-    _dbglog "    info.name ${fname}"
-    _dbglog "    datapath: ${datapath}"
-    _dbglog "    fastresume_path: ${fastpath}"
+    _dbglog "      metapath: ${metapath}"
+    _dbglog "      datadir: ${rt_datapath}"
+    _dbglog "      info.name ${fname}"
+    _dbglog "      datapath: ${datapath}"
+    _dbglog "      fastresume_path: ${fastpath}"
 
     # do not change the original torrent file
-    [[ -f ${fastpath} ]] || cp ${metapath} ${fastpath}
+    [[ -f "${fastpath}" ]] || cp "${metapath}" "${fastpath}"
 
     # add fast resume information
     if ( chtor -q --fast-resume="${datapath}" "${fastpath}" ); then
@@ -129,46 +116,63 @@ function _load_single_torrent() {
                             "d.directory.set=\"${rt_datapath}\"" \
                             "d.custom1.set=${rt_tag}" \
                             "d.priority.set=2" ); then
-            _vlog "${fname} | Loaded torrent successfully."
+            echo "${fname} | Loaded successfully"
         else
             _vlog "${fname} | ERROR: rtxmlrpc failed to load torrent."
         fi
     else
-        _vlog "${fname} | Failed to add fast resume information."
+        _vlog "${fname} | ERROR: Failed to add fast resume information."
     fi
 }
 
-function _load_all_torrents() {
-    local metadir="${1}"
-    local datadir="${2}"
-    local rt_tag="${3}"
-    _dbglog "  Loading all torrents from"
-    _dbglog "    metadir: ${metadir}"
-    _dbglog "    datadir: ${datadir}"
-    find "${metadir}/" -regextype sed -regex '^'${metadir}'/[0-9a-fA-F]\{40\}\.torrent' -type f -print0 | while read -r -d $'\0' metapath
-    do
-        _load_single_torrent "${metapath}" "${datadir}" "${rt_tag}"
-    done
+#
+# Wrapper function to read info.txt within metadir
+# and load each torrent sequentially.
+# Usage:
+#     _read_info_and_load <metadir> <datadir> <tag>
+#    
+#     <metadir> absolute path of directory containing
+#         info.txt and all torrent files
+#     <datadir> absolute path of torrent data.
+#         This must be the parent directory to which
+#         the path from info.txt will be appended.
+#     <tag> (optional) rutorrent tag
+function _read_info_and_load() {
+    local metadir
+    local datadir
+    local rt_tag
+    metadir="${1%/}"
+    datadir="${2%/}"
+    rt_tag="${3}"
+    _dbglog "  _read_info_and_load"
+    _dbglog "      metadir: ${metadir}"
+    _dbglog "      datadir: ${datadir}"
+    while read -r rtinfo; do
+        mhash=$( echo "${rtinfo}" | cut -f1 )
+        fpath=$( echo "${rtinfo}" | cut -f2 )
+        metapath="${metadir}"/"${mhash}.torrent"
+        datapath="${datadir}"/"${fpath}"
+        _load_single_torrent "${metapath}" "${datapath}" "${rt_tag}"
+    done < "${metadir}/info.txt"
 }
 
+[[ "${1}" == "help" ]] && _show_help 0
+[[ "${1}" == "--help" ]] && _show_help 0
+[[ "${1}" == "-h" ]] && _show_help 0
+[[ $# -lt 2 ]] && _show_help 1 "This script requires at least two arguments. Only $# given."
 
-echo "Loading ${PACKNAME}"
-_dbglog "    Metapath: ${_METAPATH}"
-_dbglog "    Datapath: ${_DATAPATH}"
-#####################
-# Load SEASON
-#####################
-if [[ -d "${_METAPATH}/season" ]]; then
-    _load_all_torrents "${_METAPATH}/season" "$( dirname ${_DATAPATH} )" "${_RUTORRENT_TAG}"
-else
-    _vlog "    No season directory found."
-fi
+g_metapath=$( realpath "${1}" )
+g_datapath=$( realpath "${2}" )
+g_tag="${3}"
+g_jobname=$( basename "${g_metapath}" )
 
-#####################
-# Load EPISODES
-#####################
-if [[ -d "${_METAPATH}/episodes" ]]; then
-    _load_all_torrents "${_METAPATH}/episodes" "${_DATAPATH}" "${_RUTORRENT_TAG}"
+_dbglog "Loading ${g_jobname}"
+_dbglog "    Metapath: ${g_metapath}"
+_dbglog "    Datapath: ${g_datapath}"
+
+if [[ -f "${g_metapath}/info.txt" ]]; then
+    _read_info_and_load "${g_metapath}" "${g_datapath}" "${g_tag}"
 else
-    _vlog "    No episode directory found."
+    _vlog "    ERROR: No information text found."
+    exit 1
 fi
