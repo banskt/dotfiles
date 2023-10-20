@@ -39,8 +39,8 @@ source "${my_scriptdir}/rsync-helpers.sh"
 dateflag=$( date +"%Y-%m-%d" )
 randflag=$( cat /dev/urandom | tr -cd 'a-z0-9' | head -c 6 )
 
-VERBOSE_FLAG=1
-DEBUG_FLAG=1
+VERBOSE_FLAG=0
+DEBUG_FLAG=0
 
 SB_BASHLOG_FILE="${my_logdir}/${dateflag}/action.${randflag}.log"
 SB_ARCHIVE_FILE="${my_logdir}/${dateflag}/archivelist.${randflag}.log"

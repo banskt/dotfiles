@@ -10,11 +10,28 @@ _is_verbose() {
 }
 
 
+_is_fileout_possible() {
+    if [[ ! -z "${SB_BASHLOG_FILE}" ]]; then
+        { [[ -f "${SB_BASHLOG_FILE}" ]] || touch "${SB_BASHLOG_FILE}" > /dev/null 2>&1; } && return 0 || return 1
+    else
+        return 1
+    fi
+}
+
+
 function _filelog() {
     local msg
     msg="${@}"
-    if [[ ! -z "${SB_BASHLOG_FILE}" ]]; then
-        echo "${msg}" | tee -a "${SB_BASHLOG_FILE}"
+    if _is_fileout_possible; then
+        #
+        # print to stdout and file for interactive session
+        if [[ $- == *i* ]]; then
+            echo "${msg}" | tee -a "${SB_BASHLOG_FILE}"
+        #
+        # do not print to stdout for non-interactive session
+        else
+            echo "${msg}" >> "${SB_BASHLOG_FILE}"
+        fi
     else
         echo "${msg}"
     fi
@@ -23,6 +40,7 @@ function _filelog() {
 
 function _vlog() {
     # this function always returns True
+    # call _filelog with a verbose flag
     { _is_verbose && _filelog "${@}"; } || return 0
 }
 
