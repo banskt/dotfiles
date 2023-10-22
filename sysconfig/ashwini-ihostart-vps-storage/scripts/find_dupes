@@ -1,0 +1,48 @@
+#!/bin/bash
+
+searchdir="${1:-$( pwd )}"
+searchpath="$( realpath "${searchdir}" )"
+
+function _get_inode_nums() {
+    while read -d $'\0' fpath 
+    do 
+        echo "$( stat -c '%i'  "${fpath}" )"
+    done
+}
+
+function _ensure_dupe() {
+    # check if the filenames are hardlinks
+    while read -r -d$'\n' fname; 
+    do 
+        inodenum_array=()
+        for inum in $( find "${searchdir}/" -type f -name "${fname}" -print0 | _get_inode_nums ); do
+            inodenum_array+=( "${inum}" )
+        done
+        #echo "${fname}" "${inodenum_array}"
+        inodenum="${inodenum_array[0]}"
+        is_dupe=0
+        for inum in "${inodenum_array[@]}"; do
+            [[ "${inum}" != "${inodenum}" ]] && is_dupe=1
+        done
+        [[ "${is_dupe}" == 1 ]] && _report_dupe "${fname}"
+    done
+}
+
+function _report_dupe() {
+    local fname
+    fname="${1%/}"
+    echo "=============================================="
+    echo "${fname}"
+    echo ""
+    find "${searchdir}/" -type f -name "${fname}" -print0 | while read -d $'\0' fpath
+    do
+        parentdir=$( dirname "${fpath}" )
+        inodenum=$( ls -i "${fpath}" | cut -f1 -d' ' )
+        echo -e "${inodenum}\t${parentdir}"
+    done
+    echo ""
+}
+
+
+# find duplicate filenames
+find "${searchdir}/" -type f -size +1M -printf "%f\n" | sort | uniq -d | _ensure_dupe
