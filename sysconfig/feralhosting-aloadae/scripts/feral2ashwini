@@ -39,7 +39,7 @@ source "${my_scriptdir}/rsync-helpers.sh"
 dateflag=$( date +"%Y-%m-%d" )
 randflag=$( cat /dev/urandom | tr -cd 'a-z0-9' | head -c 6 )
 
-VERBOSE_FLAG=1
+VERBOSE_FLAG=0
 DEBUG_FLAG=0
 
 SB_BASHLOG_FILE="${my_logdir}/${dateflag}/action.${randflag}.log"
@@ -132,11 +132,16 @@ mkdir -p "${tempdir}"
 tempfile_targetlist=$( mktemp --tmpdir="${tempdir}" targetlist.XXX.txt )
 trap "rm -f ${tempfile_targetlist}" EXIT INT QUIT TERM
 
+#
+# Take the input from rtcontrol and keep only the relative path.
+# Remove '.' from list | reason: error-ed torrents will not show any path
+# Sort and keep unique values | reason: cross-seeding same file in multiple trackers
+#
 function _unique_relative_input() {
     while read -r -d$'\n' fpath
     do 
         echo "$( realpath "${fpath}" --relative-to="${ARCHIVE_SOURCE_DATAPATH}" )"
-    done | sort | uniq 
+    done |  grep -v -e '^\.$' | sort | uniq 
 }
 
 if [[ "${dirlist_file}" == "all" ]]; then
@@ -256,6 +261,33 @@ function _collect_metafiles() {
         # Store the information in a separate file
         echo -e "${mhash}\t${relpath}" >> "${metapath}/info.txt"
     done
+    sleep 1
+
+    # resolve hard links --
+    # Are there other files on the disk which are being seeded
+    # with filenames matching those in the directory?
+    # Collect them as well!
+    # this can be done by searching for names (instead of path) in rtorrent!
+    # Better solution is: find . -samefile
+    # but that is also more convoluted
+    if [[ -d "${datapath}" ]]; then
+        find "${datapath}/" -type f -print0 | while read -r -d $'\0' fpath
+        do
+            fname=$( basename "${fpath}" )
+            escaped_fname=$( printf '%q' "${fname}" | sed 's/\\././g' )
+            mhash=$( rtcontrol -qo 'hash' name='/^'"${escaped_fname}"'.*$/' )
+            # if there is an existing hash
+            if [[ "${mhash}" =~ [0-9a-fA-F]{40} ]]; then
+                # which is not already included
+                if ! grep -q "${mhash}" "${metapath}/info.txt"; then
+                    relpath=$( realpath "${fpath}" --relative-to="${data_parentdir}" )
+                    rtmpath="${rt_session_dir}"/"${mhash}.torrent"
+                    cp -f "${rtmpath}" "${metapath}/"
+                    echo -e "${mhash}\t${relpath}" >> "${metapath}/info.txt"
+                fi
+            fi
+        done
+    fi
     sleep 1
 
     # wait for files to copy

@@ -5,6 +5,7 @@ source "${HOME}/.bashrc"
 my_scriptdir="/media/sdt/banskt/usr/scripts"
 source "${my_scriptdir}/logging-helpers.sh"
 source "${my_scriptdir}/rtcontrol-helpers.sh"
+source "${my_scriptdir}/mktorrent-helpers.sh" # provides _btn_mktorrent to load directly into client
 
 
 if [[ -f "${HOME}/btn-autopack.cfg" ]]; then
@@ -19,16 +20,17 @@ fi
 ################################################
 ### BTN_PACKBASE_DIR - the base directory where packs are created.
 ###     A new directory is created here for packing the season.
-### BTN_METAFILE_DIR - directory where rtorrent watches for metafiles.
+### BTN_METAWATCH_DL_DIR - directory where rtorrent watches for metafiles to download.
 ###     Putting metafiles here will automatically start downloads.
+###     This automation has been configured with rtorrent.
+### BTN_METAWATCH_UL_DIR - directory where rtorrent watches for metafiles to upload.
+###     Putting metafiles here will automatically start uploads.
+###     This automation has been configured with rtorrent.
 ### BTN_STAGING_DIR  - directory for created torrents and mediainfo.
 ### BTN_AUTHKEY      - authorization key.
 ### BTN_TORRENTPASS  - passkey for torrents.
 ### BTN_ANNOUNCE     - announce URL.
 ### BTN_SITEURL      - domain name of the website.
-### BTN_METAFILE_STORE (optional) - directory where torrent
-###     metafiles are stored after the packing is complete.
-###     If empty, metafiles are removed.
 ### BTN_AUTOPACK_LOGDIR - directory where logs will be stored.
 ### BTN_AUTOPACK_TMPDIR - directory where temporary files will be stored.
 ################################################
@@ -219,14 +221,12 @@ fi
 packdir_path="${BTN_PACKBASE_DIR}/${packdir_name}"
 mkdir -p "${packdir_path}"
 
-is_store_metafile=false
-metastore_path=""
-if [[ ! -z "${BTN_METAFILE_STORE}" ]]; then
-	is_store_metafile=true
-    metastore_path="${BTN_METAFILE_STORE}/${release_name}"
-    [[ -d "${metastore_path}" ]] || mkdir -p "${metastore_path}"
-fi
+# Staging path
+# just a short code instead of calling the full path
+stage_prefix="${BTN_STAGING_DIR}/${release_name}"
 
+#
+#
 _filelog ""
 _filelog "------------------------------"
 _filelog "Release Name: ${release_name}"
@@ -257,7 +257,7 @@ for metafile in "${metafile_array[@]}"; do
     _dbglog "Check if file ${metafile} is already downloaded"
     thash=$( lstor -qo __hash__ "${metafile}" )
     thash_array+=( "${thash}" )
-    { rtcontrol -qo 'is_open' hash="${thash}"; } || cp -f "${metafile}" "${BTN_METAFILE_DIR}"
+    { rtcontrol -qo 'is_open' hash="${thash}"; } || cp -f "${metafile}" "${BTN_METAWATCH_DL_DIR}"
 done
 
 _wait_till_dl_complete "${thash_array[@]}"
@@ -274,33 +274,21 @@ done
 
 # Create torrent file using mktorrent
 _filelog "Creating torrent file."
-chunk_size=$( _get_rt_chunk_size "${packdir_path}" )
-chunk_length=$( _get_rt_chunk_length "${chunk_size}" )
-targetpath="${BTN_STAGING_DIR}/${release_name}.torrent"
-[[ -f "${targetpath}" ]] && rm -f "${targetpath}"
-_filelog "Calculated chunk size: ${chunk_size} | chunk piece length: ${chunk_length}"
-mkcmd="mktorrent -p -t 16 -a ${BTN_ANNOUNCE} --comment=BTN -l ${chunk_length} -o ${targetpath}"
-_is_verbose && mkcmd="${mkcmd} -v"
-${mkcmd} "${packdir_path}" || _do_endscript
+_btn_mktorrent "${stage_prefix}.torrent" "${packdir_path}" "${BTN_ANNOUNCE}" || _do_endscript
 
 
 # Create mediainfo file for uploading
 _filelog "Creating mediainfo file."
 episode1_filename=$( lstor -qo info.name "${metafile_array[0]}" )
-sourcepath="${packdir_path}/${episode1_filename}"
-targetpath="${BTN_STAGING_DIR}/${release_name}.info"
-[[ -f "${targetpath}" ]] && rm -f "${targetpath}"
-mediainfo "${sourcepath}" >> "${targetpath}"
+[[ -f "${stage_prefix}.info" ]] && rm -f "${stage_prefix}.info"
+mediainfo "${packdir_path}/${episode1_filename}" >> "${stage_prefix}.info"
 
+# Load torrents to rTorrent?
+cp "${stage_prefix}.torrent" "${BTN_METAWATCH_UL_DIR}"
 
 # Cleanup temporary directory containing metafiles
-if [[ "${is_store_metafile}" == "true" ]]; then
-    for metafile in "${metafile_array[@]}"; do
-        cp "${metafile}" "${metastore_path}/"
-    done
-fi
 rm -rf "${release_tempdir}"
 
 _filelog "SUCCESS"
-touch "${BTN_STAGING_DIR}/${release_name}.done"
+touch "${stage_prefix}.done"
 exit 0
