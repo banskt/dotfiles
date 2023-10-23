@@ -2,14 +2,18 @@
 
 shopt -s expand_aliases
 source "${HOME}/.bashrc"
-
-dateflag=$( date +"%Y-%m-%d" )
-logdir="${HOME}/local/etc/housekeeping/logs/${dateflag}"
-mkdir -p "${logdir}"
+source "${HOME}/.custom_dotfiles/rtcontrol-helpers.sh"
 
 # logfiles
+logdir="${HOME}/local/etc/housekeeping/logs/$( date +"%Y-%m-%d" )"
+mkdir -p "${logdir}"
 unregistered_logfile="${logdir}/remove-unregistered.log"
 orphan_logfile="${logdir}/remove-orphan.log"
+
+# rTorrent session backup file
+session_bakfile="${HOME}/data/backup/rtorrent.session/rtsession.backup.$( date +'%Y.%m.%d-%H%M' ).tgz"
+rtxmlrpc -q session.save
+tar cfz "${session_bakfile}" $( echo $(rtxmlrpc session.path)/ | tr -s / / )*.torrent*
 
 rt-error --delete --yes >> "${unregistered_logfile}" 2>&1
 
