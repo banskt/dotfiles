@@ -1,15 +1,5 @@
 #!/usr/bin/env bash
 
-# Usage
-#     data-archive <config> <dirlist_file> [tag]
-# Arguments
-#     <config> name of configuration used to define global variables
-#         can be any one of: btn_season_pack, tv, movie_bengali, movie_english, movie_hindi, movie_foreign
-#     <dir_list_file> string for the path of a file containing list of directories to be archived
-#         special string: 'all' to archive everything in the directory
-#     [tag] optional string used as a tag for rutorrent in ashwini
-#     
-
 # In this script, quoting is important as filenames
 # are involved. Invariably, there are bugs
 # which I will fix as I keep working on this. 
@@ -242,9 +232,9 @@ function _collect_metafiles() {
     # ** Important **
     # This is required because some special characters like ,!&
     # are not handled in pyrocore (rtcontrol).
-	escaped_datapath=$( printf '%q' "${datapath}" | sed 's/\\././g' )
-    _dbglog "Escaped Path: ${escaped_datapath}"
-	rtcontrol -qo 'hash,path' path='/^'"${escaped_datapath}"'.*$/' | while read -r -d$'\n' rtinfo
+	#escaped_datapath=$( printf '%q' "${datapath}" | sed 's/\\././g;s/+/./g' )
+    _dbglog "Path Selector: $( _rt_path_selector "${datapath}" )"
+	rtcontrol -qo 'hash,path' $( _rt_path_selector "${datapath}" ) | while read -r -d$'\n' rtinfo
     do
         mhash=$( echo "${rtinfo}" | cut -f1 )
         _dbglog "Hash: ${mhash}"
@@ -274,8 +264,8 @@ function _collect_metafiles() {
         find "${datapath}/" -type f -print0 | while read -r -d $'\0' fpath
         do
             fname=$( basename "${fpath}" )
-            escaped_fname=$( printf '%q' "${fname}" | sed 's/\\././g' )
-            mhash=$( rtcontrol -qo 'hash' name='/^'"${escaped_fname}"'.*$/' )
+            name_selector=$( _rt_name_selector "${fname}" )
+            mhash=$( rtcontrol -qo 'hash' "${name_selector}")
             # if there is an existing hash
             if [[ "${mhash}" =~ [0-9a-fA-F]{40} ]]; then
                 # which is not already included

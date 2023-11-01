@@ -56,7 +56,7 @@ function _get_rt_chunk_size() {
         chunk_size="512K"
     elif [[ "${fsize}" -lt 2048 ]]; then
         chunk_size="1024K"
-    elif [[ "${fsize}" -lt 20480 ]]; then
+    elif [[ "${fsize}" -lt 8192 ]]; then
         chunk_size="2048K"
     else
         chunk_size="4096K"
@@ -78,6 +78,12 @@ _get_rt_chunk_length() {
 function _btn_announce_from_config() {
 	# Do not export the variables
 	bash -c '[[ -f "${HOME}/btn-autopack.cfg" ]] && { source "${HOME}/btn-autopack.cfg"; echo ${BTN_ANNOUNCE}; }'
+}
+
+
+function _ptp_announce_from_config() {
+	# Do not export the variables
+	bash -c '[[ -f "${HOME}/ptp-autopack.cfg" ]] && { source "${HOME}/ptp-autopack.cfg"; echo ${PTP_ANNOUNCE}; }'
 }
 
 
@@ -117,4 +123,35 @@ function _btn_mktorrent() {
           --no-cross-seed \
           --fast-resume="${datapath}" \
  	      "${metapath}"
+}
+
+function _ptp_mktorrent() {
+    local metapath
+    local datapath
+    local announce_url
+    local lchunk
+    metapath="$( realpath "${1}" )"
+    datapath="$( realpath "${2}" )"
+    announce_url="${3}"
+    # Housekeeping
+    # if announce_url is not provided, 
+    # try to grab it from configuration file.
+    if [[ -z "${announce_url}" ]]; then
+        announce_url="$( _ptp_announce_from_config )"
+        [[ -z "${announce_url}" ]] && { echo "Could not find announce url."; exit 1; }    
+    fi  
+    ## DEBUG ONLY
+    ## echo "Metapath: ${metapath}"
+    ## echo "Datapath: ${datapath}"
+    ## echo "Announce URL: ${announce_url}"
+    [[ -f "${metapath}" ]] && rm -f "${metapath}"
+    # we can use mktor but mktorrent is faster and multi-threaded
+    lchunk="$( _get_rt_chunk_length "$( _get_rt_chunk_size "${datapath}" )" )"
+    mktorrent --announce="${announce_url}" \
+              --private \
+              --threads=16 \
+              --piece-length="${lchunk}" \
+              --comment=PTP \
+              --output="${metapath}" \
+              "${datapath}"
 }

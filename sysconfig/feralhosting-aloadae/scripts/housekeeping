@@ -19,7 +19,7 @@ tar cfz "${session_bakfile}" $( echo $(rtxmlrpc session.path)/ | tr -s / / )*.to
 rt-error --delete --yes >> "${unregistered_logfile}" 2>&1
 
 # send files from spam and btn-packs
-feral2ashwini inactive btn-packs BTNarXiv-$( date +"%Y-%m-%d" )
+feral2ashwini all btn-packs BTNarXiv-$( date +"%Y-%m-%d" )
 feral2ashwini inactive btn-spam BTNspam-$( date +"%Y-%m-%d" )
 
 # Delete orphan data from disk

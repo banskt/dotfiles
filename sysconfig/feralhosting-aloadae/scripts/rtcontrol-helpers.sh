@@ -14,6 +14,23 @@ function rt-orphan() {
     rtcontrol -qO orphans.txt.default // -Ddir="${tgt}"
 }
 
+function _rt_path_selector() {
+    local fpath
+    local escaped_fpath
+    fpath=$( realpath "${1}" )
+    escaped_fpath=$( printf '%q' "${fpath}" | sed 's/\\././g;s/+/./g' )
+    echo path='/^'"${escaped_fpath}"'.*$/'
+}
+
+function _rt_name_selector() {
+    local fname
+    local escaped_fname
+    fname="${1}"
+    escaped_fname=$( printf '%q' "${fname}" | sed 's/\\././g;s/+/./g' )
+    echo name='/^'"${escaped_fname}"'.*$/'
+}
+
+
 # Recursive search to find if there are any file under this path
 # which has completed downloading with 'timelimit' condition.
 #       y : year 
@@ -23,15 +40,6 @@ function rt-orphan() {
 #       h : hour
 #       i : minute
 #       s : second
-function _rt_path_selector() {
-    local fpath
-    local escaped_fpath
-    fpath=$( realpath "${1}" )
-    escaped_fpath=$( printf '%q' "${fpath}" | sed 's/\\././g' )
-    echo path='/^'"${escaped_fpath}"'.*$/'
-}
-
-
 function rt-completed-inactive() {
     rtcontrol -q -o'path' is_complete=y completed=+60s last_xfer=+6h $( _rt_path_selector "${1}" )
 }
