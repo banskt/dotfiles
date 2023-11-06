@@ -151,7 +151,11 @@ function _ptp_mktorrent() {
               --private \
               --threads=16 \
               --piece-length="${lchunk}" \
-              --comment=PTP \
               --output="${metapath}" \
               "${datapath}"
+	# add PTP information and fastresume information
+	chtor --quiet \
+          -s info.source=PTP \
+          --no-cross-seed \
+ 	      "${metapath}"
 }

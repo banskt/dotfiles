@@ -13,7 +13,11 @@ function ffmpeg-screenshots() {
     # fps = nshot / total_duration
     fps=$( echo "${duration_ms}" "${nshot}" | awk '{ eff_dur = ($1/1000) - 1200; fps = $2/eff_dur; print fps }' )
     echo "Color Matrix: ${color_matrix}"
-    f_colmat="bt709" # default
+    color_matrix="${color_matrix:-BT.601}"
+    outdir="${outdir}/${color_matrix}"
+    mkdir -p "${outdir}"
+    #f_colmat="bt709" # default
+    #f_scale_anamorphic="'max(sar,1)*iw':'max(1/sar,1)*ih'"
     if [[ "${color_matrix}" == "BT.709" ]]; then
         f_colmat="bt709"
         f_scale_anamorphic="'max(sar,1)*iw':'max(1/sar,1)*ih'"
@@ -29,6 +33,7 @@ function ffmpeg-screenshots() {
     echo "infile= ${infile}"
     echo "fps= ${fps}"
     echo "scale= ${f_scale_anamorphic}"
+    echo "f_colmat= ${f_colmat}"
     echo "vf = \"fps=${fps}, scale=${f_scale_anamorphic}:in_h_chr_pos=0:in_v_chr_pos=128:in_color_matrix=${f_colmat}:flags=full_chroma_int+full_chroma_inp+accurate_rnd+spline\""
     ffmpeg \
         -ss 00:10:00.000 \
