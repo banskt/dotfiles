@@ -22,9 +22,9 @@ if is_osx; then
     alias ls='gls --color=auto'
 fi
 
-alias ll='ls -lhF --group-directories-first'
-alias lla='ls -AlhF --group-directories-first'
-alias lsc='ls -ACF --group-directories-first'
+alias ll='ls   -lhF --quoting-style=literal --group-directories-first'
+alias lla='ls -AlhF --quoting-style=literal --group-directories-first'
+alias lsc='ls -ACF  --quoting-style=literal --group-directories-first'
 
 # create a desktop notification alert.  Use like so:
 #     sleep 1; alert

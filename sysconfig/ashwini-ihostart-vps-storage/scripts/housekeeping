@@ -25,7 +25,7 @@ session_dir="$( echo $(rtxmlrpc session.path)/ | tr -s / / )"
 ( cd "$( dirname "${session_dir}" )" && \
   tar cfz "${session_bakfile}" "$( basename "${session_dir}")"/*.torrent* )
 
-rt-error --delete --yes >> "${unregistered_logfile}" 2>&1
+rt-unregistered -qo'alias,name' --delete --yes >> "${unregistered_logfile}" 2>&1
 
 tgtdir1="${HOME}/data/media.library/btn-archive"
 tgtdir2="${HOME}/data/downloads/btn-spam"

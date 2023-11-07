@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+
+downloaddir="/home/banskt/data/downloads/rtorrent/movie"
+librarydir="/home/banskt/data/media.library/movie"
+stagingdir="${librarydir}/tmm-staging"
+
+function _skip_extension() {
+    local fname
+    local ext
+    fname="${1}"
+    ext="${fname##*.}"
+    [[ "${ext}" =~ ^(zip|nfo|rar|idx)$ ]]
+}
+
+function _link_file_nodepth() {
+    [ $# -ne 3 ] && { echo "Usage: _link_file_nodepth source_dir destination_dir search_dir" ; exit 1; }
+    local srcdir
+    local dstdir
+    local searchdir
+    srcdir=${1%/}
+    dstdir=${2%/}
+    searchdir=${3%/}
+    find "${srcdir}" -maxdepth 1 -type f -print0 | \
+        while read -r -d $'\0' m_file; 
+        do
+            if ( ! _skip_extension "${m_file}" ); then
+                m_inum=$( stat -c %i "${m_file}" )
+                if [[ ! -f $( find "${searchdir}" -inum  "${m_inum}") ]]; then 
+                    m_file_relpath=$( realpath "${m_file}" --relative-to="${srcdir}" )
+                    echo "New link for: ${m_file_relpath}"
+                    ln "${m_file}" "${dstdir}/${m_file_relpath}"
+                fi
+            fi
+        done
+}
+
+_link_file_nodepth "${downloaddir}" "${stagingdir}" "${librarydir}"
+
+## Recurse for directories
+find "${downloaddir}" -mindepth 1 -type d -print0 | \
+    while read -r -d $'\0' m_dir;
+    do
+        m_dir_dst="${stagingdir}/"$( realpath "${m_dir}" --relative-to="${downloaddir}" )
+        mkdir -p "${m_dir_dst}"
+        _link_file_nodepth "${m_dir}" "${m_dir_dst}" "${librarydir}"
+    done
+
+## Remove empty directories recursively
+find ${stagingdir} -mindepth 1 -type d -empty -delete
+#find ${stagingdir} -mindepth 1 -type d -empty -print0 | xargs -0 -I{} rm -rf {}
