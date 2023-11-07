@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+# If this file is sourced, then source the functions and exit.
+# Otherwise, run the commands
+(return 0 2>/dev/null) && is_sourced=1 || is_sourced=0
+
+
 # In this script, quoting is important as filenames
 # are involved. Invariably, there are bugs
 # which I will fix as I keep working on this. 
@@ -24,141 +29,6 @@ source "${my_scriptdir}/rtcontrol-helpers.sh"
 source "${my_scriptdir}/rsync-helpers.sh"
 
 # =================================================
-# Fixed arguments
-# =================================================
-dateflag=$( date +"%Y-%m-%d" )
-randflag=$( cat /dev/urandom | tr -cd 'a-z0-9' | head -c 6 )
-
-VERBOSE_FLAG=0
-DEBUG_FLAG=0
-
-SB_BASHLOG_FILE="${my_logdir}/${dateflag}/action.${randflag}.log"
-SB_ARCHIVE_FILE="${my_logdir}/${dateflag}/archivelist.${randflag}.log"
-mkdir -p "$( dirname "${SB_BASHLOG_FILE}" )"
-
-# =================================================
-# Help function
-# =================================================
-_do_endscript() {
-    echo "FAILED."
-    exit 1
-}
-
-_datefmt() {
-    date +'%Y-%m-%d %H:%M:%S'
-}
-
-
-_show_help() {
-    local exitcode
-    exitcode=${1}
-    if [[ ! -z "${2}" ]]; then
-        echo "Error: ${2}"
-        echo ""
-    fi  
-    echo "feral2ashwini: Archive files/directories from feral to ashwini"
-    echo "Usage:"
-    echo "    feral2ashwini <dirlist> <config> [rutorrent_tag]"
-    echo ""
-	echo "The source and target paths are hardcoded in the <config>"
-    echo "Currently this script only works on moving directories specified"
-    echo "in the config file." 
-    echo "    dirlist:  path of a file containing the list of files/directories"
-    echo "              which should be archived. These files/directories must be"
-    echo "              available in the source path specified in the config."
-    echo "              Special flags:"
-    echo "              - 'all'      : download completed files/directories"
-    echo "              - 'inactive' : inactive for last 6 hours"
-    echo "    config:   configuration file located in ~/usr/archive-config/<config>.cfg"
-    echo "              Source configurations include:"
-    echo "              - 'tv'        : ~/downloads/tv"
-    echo "              - 'btn-spam'  : ~/downloads/btn-spam"
-    echo "              - 'btn-packs' : ~/uploads/btn-packs"
-    echo "    tag:      Label for rutorrent in ashwini (optional)"
-    echo ""
-    [[ $exitcode == 0 ]] && exit 0 || exit 1
-}
-
-
-# =================================================
-# Input arguments
-# =================================================
-dirlist_file="${1}"
-config_name="${2}"
-archive_rt_tag="${3}"
-
-
-# =================================================
-# Process input, check errors
-# =================================================
-if [[ -z "${config_name}" ]] || [[ -z "${dirlist_file}" ]]; then
-	_show_help 1 "Wrong arguments for this command. Please check usage."
-fi
-
-# From the configuration file,
-# the following global variables are obtained:
-#
-# ARCHIVE_SOURCE_DATAPATH
-# ARCHIVE_TARGET_DATAPATH
-# ARCHIVE_TARGET_METAPATH
-#
-if [[ -f "${my_configdir}/${config_name}.cfg" ]]; then
-    source "${my_configdir}/${config_name}.cfg"
-else
-    _show_help 1 "Configuration file ${my_configdir}/${config_name}.cfg not found. Exiting."
-fi
-
-# We need a local temporary directory before anything else
-# tempdir=$( mktemp --tmpdir="${my_tmpdir}" -d "${config_name}".XXX )
-# double quotes expands now rather than when signalled
-# trap "rm -rf ${tempdir}" EXIT INT QUIT TERM
-# As of now do not remove temporary directory / debug required
-tempdir="${my_tmpdir}/${config_name}.${randflag}"
-mkdir -p "${tempdir}"
-
-# Get the dirlist file
-# create a temporary file to keep a copy of the input file
-#
-tempfile_targetlist=$( mktemp --tmpdir="${tempdir}" targetlist.XXX.txt )
-trap "rm -f ${tempfile_targetlist}" EXIT INT QUIT TERM
-
-#
-# Take the input from rtcontrol and keep only the relative path.
-# Remove '.' from list | reason: error-ed torrents will not show any path
-# Sort and keep unique values | reason: cross-seeding same file in multiple trackers
-#
-function _unique_relative_input() {
-    while read -r -d$'\n' fpath
-    do 
-        echo "$( realpath "${fpath}" --relative-to="${ARCHIVE_SOURCE_DATAPATH}" )"
-    done |  grep -v -e '^\.$' | sort | uniq 
-}
-
-if [[ "${dirlist_file}" == "all" ]]; then
-    _filelog "$( _datefmt ) : Archive all completed data in ${ARCHIVE_SOURCE_DATAPATH}"
-    rt-completed "${ARCHIVE_SOURCE_DATAPATH}" | _unique_relative_input > "${tempfile_targetlist}"
-	if grep -q "/" "${tempfile_targetlist}"; then
-		_filelog "$( _datefmt ) : ERROR. 'all' flag cannot handle subdirectories. Provide explicit directory list file."
-		exit 1
-	fi
-#
-elif [[ "${dirlist_file}" == "inactive" ]]; then
-    _filelog "$( _datefmt ) : Archive all completed and inactive data in ${ARCHIVE_SOURCE_DATAPATH}"
-    rt-completed-inactive "${ARCHIVE_SOURCE_DATAPATH}" | _unique_relative_input > "${tempfile_targetlist}"
-	if grep -q "/" "${tempfile_targetlist}"; then
-		_filelog "$( _datefmt ) : ERROR. 'inactive' flag cannot handle subdirectories. Provide explicit directory list file."
-		exit 1
-	fi
-#
-else
-	if [[ ! -f "${dirlist_file}" ]]; then 
-		_show_help 1 "Input file ${dirlist_file} not found. Exiting."
-	fi
-	_filelog "$( _datefmt ) : Archive data specified in ${dirlist_file}"
-	cat "${dirlist_file}" > "${tempfile_targetlist}"
-fi
-
-# =================================================
 # useful functions, snippets
 # =================================================
 
@@ -174,6 +44,10 @@ fi
 #     https://stackoverflow.com/q/9393038
 #     
 # 
+_datefmt() {
+    date +'%Y-%m-%d %H:%M:%S'
+}
+
 function _ensure_remote_dir() {
     # take care of whitespace in directory name
     local target
@@ -378,6 +252,141 @@ function _get_announce_domain() {
     echo "$( lstor -qo announce "${1}" | sed -e 's/[^/]*\/\/\([^@]*@\)\?\([^:/]*\).*/\2/' )"
 }
 
+
+# =================================================
+# EXIT now if sourced, else continue
+# =================================================
+[[ "$is_sourced" == 1 ]] && return
+
+# =================================================
+# Fixed arguments
+# =================================================
+dateflag=$( date +"%Y-%m-%d" )
+randflag=$( cat /dev/urandom | tr -cd 'a-z0-9' | head -c 6 )
+
+VERBOSE_FLAG=0
+DEBUG_FLAG=0
+
+SB_BASHLOG_FILE="${my_logdir}/${dateflag}/action.${randflag}.log"
+SB_ARCHIVE_FILE="${my_logdir}/${dateflag}/archivelist.${randflag}.log"
+mkdir -p "$( dirname "${SB_BASHLOG_FILE}" )"
+
+# =================================================
+# Help function
+# =================================================
+_do_endscript() {
+    echo "FAILED."
+    exit 1
+}
+
+_show_help() {
+    local exitcode
+    exitcode=${1}
+    if [[ ! -z "${2}" ]]; then
+        echo "Error: ${2}"
+        echo ""
+    fi  
+    echo "feral2ashwini: Archive files/directories from feral to ashwini"
+    echo "Usage:"
+    echo "    feral2ashwini <dirlist> <config> [rutorrent_tag]"
+    echo ""
+	echo "The source and target paths are hardcoded in the <config>"
+    echo "Currently this script only works on moving directories specified"
+    echo "in the config file." 
+    echo "    dirlist:  path of a file containing the list of files/directories"
+    echo "              which should be archived. These files/directories must be"
+    echo "              available in the source path specified in the config."
+    echo "              Special flags:"
+    echo "              - 'all'      : download completed files/directories"
+    echo "              - 'inactive' : inactive for last 6 hours"
+    echo "    config:   configuration file located in ~/usr/archive-config/<config>.cfg"
+    echo "              Source configurations include:"
+    echo "              - 'tv'        : ~/downloads/tv"
+    echo "              - 'btn-spam'  : ~/downloads/btn-spam"
+    echo "              - 'btn-packs' : ~/uploads/btn-packs"
+    echo "    tag:      Label for rutorrent in ashwini (optional)"
+    echo ""
+    [[ $exitcode == 0 ]] && exit 0 || exit 1
+}
+
+
+# =================================================
+# Input arguments
+# =================================================
+dirlist_file="${1}"
+config_name="${2}"
+archive_rt_tag="${3}"
+
+
+# =================================================
+# Process input, check errors
+# =================================================
+if [[ -z "${config_name}" ]] || [[ -z "${dirlist_file}" ]]; then
+	_show_help 1 "Wrong arguments for this command. Please check usage."
+fi
+
+# From the configuration file,
+# the following global variables are obtained:
+#
+# ARCHIVE_SOURCE_DATAPATH
+# ARCHIVE_TARGET_DATAPATH
+# ARCHIVE_TARGET_METAPATH
+#
+if [[ -f "${my_configdir}/${config_name}.cfg" ]]; then
+    source "${my_configdir}/${config_name}.cfg"
+else
+    _show_help 1 "Configuration file ${my_configdir}/${config_name}.cfg not found. Exiting."
+fi
+
+# We need a local temporary directory before anything else
+# tempdir=$( mktemp --tmpdir="${my_tmpdir}" -d "${config_name}".XXX )
+# double quotes expands now rather than when signalled
+# trap "rm -rf ${tempdir}" EXIT INT QUIT TERM
+# As of now do not remove temporary directory / debug required
+tempdir="${my_tmpdir}/${config_name}.${randflag}"
+mkdir -p "${tempdir}"
+
+# Get the dirlist file
+# create a temporary file to keep a copy of the input file
+#
+tempfile_targetlist=$( mktemp --tmpdir="${tempdir}" targetlist.XXX.txt )
+trap "rm -f ${tempfile_targetlist}" EXIT INT QUIT TERM
+
+#
+# Take the input from rtcontrol and keep only the relative path.
+# Remove '.' from list | reason: error-ed torrents will not show any path
+# Sort and keep unique values | reason: cross-seeding same file in multiple trackers
+#
+function _unique_relative_input() {
+    while read -r -d$'\n' fpath
+    do 
+        echo "$( realpath "${fpath}" --relative-to="${ARCHIVE_SOURCE_DATAPATH}" )"
+    done |  grep -v -e '^\.$' | sort | uniq 
+}
+
+if [[ "${dirlist_file}" == "all" ]]; then
+    _filelog "$( _datefmt ) : Archive all completed data in ${ARCHIVE_SOURCE_DATAPATH}"
+    rt-completed "${ARCHIVE_SOURCE_DATAPATH}" | _unique_relative_input > "${tempfile_targetlist}"
+	if grep -q "/" "${tempfile_targetlist}"; then
+		_filelog "$( _datefmt ) : ERROR. 'all' flag cannot handle subdirectories. Provide explicit directory list file."
+		exit 1
+	fi
+#
+elif [[ "${dirlist_file}" == "inactive" ]]; then
+    _filelog "$( _datefmt ) : Archive all completed and inactive data in ${ARCHIVE_SOURCE_DATAPATH}"
+    rt-completed-inactive "${ARCHIVE_SOURCE_DATAPATH}" | _unique_relative_input > "${tempfile_targetlist}"
+	if grep -q "/" "${tempfile_targetlist}"; then
+		_filelog "$( _datefmt ) : ERROR. 'inactive' flag cannot handle subdirectories. Provide explicit directory list file."
+		exit 1
+	fi
+#
+else
+	if [[ ! -f "${dirlist_file}" ]]; then 
+		_show_help 1 "Input file ${dirlist_file} not found. Exiting."
+	fi
+	_filelog "$( _datefmt ) : Archive data specified in ${dirlist_file}"
+	cat "${dirlist_file}" > "${tempfile_targetlist}"
+fi
 
 # #################################################
 # MAIN PROCESS STARTS HERE

@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+
+function _wait_till_complete() {
+    local mhash
+    local comp_pct
+    local logfile
+    mhash="${1}"
+    logfile="${2}"
+    comp_pct=$( rtcontrol -qo'done' hash=${mhash} )
+    echo "$( _datefmt ) : Waiting for download to complete | ${comp_pct}" >> "${logfile}"
+    until [[ "${comp_pct}" == "100.0" ]]
+    do
+        sleep 300
+        comp_pct=$( rtcontrol -qo'done' hash=${mhash} )
+        echo "$( _datefmt ) : Waiting for download to complete | ${comp_pct}" >> "${logfile}"
+    done
+    echo "$( _datefmt ) : Download complete" >> "${logfile}"
+}
+
+
+function _load_metafile_to_client() {
+    local metafilepath
+    local datafilepath
+    rtxmlrpc -q load.start_verbose '' "${metafilepath}" \
+        "d.directory.set=\"${datafilepath}\"" \
+        "d.custom1.set=BTNSpamBig" \
+        "d.priority.set=2" \
+        "d.delete_tied="
+}
+
+
+function _post_process() {
+    local mhash
+    local logfile
+    mhash="${1}"
+    logfile="${2}"
+    echo "$( _datefmt ) : Post-process ${mhash}"
+}
+
+
+_datefmt() {
+    date +'%Y-%m-%d %H:%M:%S'
+}
+
+
+metafile_dir="${HOME}/data/downloads/torrents/btn-spam-big"
+staging_dir="${HOME}/data/downloads/torrents/btn-spam-big/staging"
+download_dir="${HOME}/data/downloads/btn-spam-big"
+logfile="${staging_dir}/action.log"
+completedfile="${staging_dir}/completed.txt"
+
+
+## Make it a watching program? Never ending?
+#while true
+#do
+    find "${metafile_dir}" -mindepth 1 -name *.torrent -print0 | while read -r -d $'\0' filepath
+    do 
+        filename=$( basename "${filepath}" )
+        mhash="${filename%.torrent}"
+        if ( grep -q "${mhash}" "${completedfile}" ); then
+            echo "$( _datefmt ) : No action required for ${mhash}" >> "${logfile}"
+        else
+            rt_fname=$( lstor -qo info.name "${filepath}" )
+            echo "$( _datefmt ) : Load ${mhash} | ${rt_fname}" >> "${logfile}"
+            _load_metafile_to_client "${filepath}" "${download_dir}"
+            _wait_till_complete "${mhash}" "${logfile}"
+            echo -e "${mhash}\t${rt_fname}" >> "${completedfile}"
+            _post_process "${mhash}"
+        fi
+    done
+#    sleep 600
+#done

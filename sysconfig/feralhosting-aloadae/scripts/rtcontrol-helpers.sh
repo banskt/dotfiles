@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 
-function rt-error() {
+function rt-unregistered() {
     local mycmd
     mycmd="${@}"
-    rtcontrol -qo 'tracker,name' 'message=/.*Failure.*Unregistered.*/' ${mycmd}
+    [[ -z "${mycmd}" ]] && mycmd="-qo'alias,name'"
+    rtcontrol 'message=/.*Failure.*Unregistered.*/' $( eval echo ${mycmd} )
 }
 
 function rt-orphan() {
@@ -59,4 +60,14 @@ function _is_rt_metafile_ok() {
     else
         return 1
     fi  
+}
+
+function rt-trackerannounce() {
+    rtselect_string="${@}"
+    rtselect_string="${rtselect_string:-//}"
+    rtcontrol $( eval echo ${rtselect_string} ) -qo'hash' | while read -r -d $'\n' mhash; do rtcontrol hash=$mhash --exec "d.tracker_announce={{item.hash}}" --yes; done
+}
+
+function rt-fix-bencoded-error() {
+    rt-trackerannounce message=/.*Could.not.parse.bencoded.data.*/
 }

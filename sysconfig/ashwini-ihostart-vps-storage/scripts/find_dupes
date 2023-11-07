@@ -45,4 +45,4 @@ function _report_dupe() {
 
 
 # find duplicate filenames
-find "${searchdir}/" -type f -size +1M -printf "%f\n" | sort | uniq -d | _ensure_dupe
+find "${searchdir}/" -type f -size +1M -not -name "*.jpg" -not -name "*.png" -printf "%f\n" | sort | uniq -d | _ensure_dupe
