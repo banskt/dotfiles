@@ -230,6 +230,8 @@ function _clean_local_client() {
 		mhash=$( echo "${rtinfo}" | cut -f1 )
 		fpath=$( echo "${rtinfo}" | cut -f2 )
         _filelog "$( _datefmt ) : Removing torrent from client | ${fpath}"
+        rtcontrol 'hash='"${mhash}" --exec "d.tracker_announce={{item.hash}}" --yes
+        sleep 2
 		rtcontrol 'hash='"${mhash}" --quiet --delete --yes
 	done < "${metapath}/info.txt"
 }

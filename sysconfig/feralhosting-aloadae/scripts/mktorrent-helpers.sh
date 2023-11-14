@@ -111,7 +111,7 @@ function _btn_mktorrent() {
 	lchunk="$( _get_rt_chunk_length "$( _get_rt_chunk_size "${datapath}" )" )"
 	mktorrent --announce="${announce_url}" \
 	          --private \
-              --threads=16 \
+              --threads=8 \
               --piece-length="${lchunk}" \
               --comment=BTN \
               --output="${metapath}" \
@@ -149,7 +149,7 @@ function _ptp_mktorrent() {
     lchunk="$( _get_rt_chunk_length "$( _get_rt_chunk_size "${datapath}" )" )"
     mktorrent --announce="${announce_url}" \
               --private \
-              --threads=16 \
+              --threads=8 \
               --piece-length="${lchunk}" \
               --output="${metapath}" \
               "${datapath}"

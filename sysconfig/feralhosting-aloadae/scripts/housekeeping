@@ -26,7 +26,7 @@ session_dir="$( echo $(rtxmlrpc session.path)/ | tr -s / / )"
   tar cfz "${session_bakfile}" "$( basename "${session_dir}")"/*.torrent* )
 
 # Delete unregistered torrents
-rt-error --delete --yes >> "${unregistered_logfile}" 2>&1
+rt-unregistered -qo'alias,name' --delete --yes >> "${unregistered_logfile}" 2>&1
 
 # send files from spam and btn-packs
 feral2ashwini all btn-packs BTNarXiv-$( date +"%Y-%m-%d" )
