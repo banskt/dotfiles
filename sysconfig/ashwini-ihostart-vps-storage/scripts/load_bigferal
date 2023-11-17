@@ -21,20 +21,16 @@ function _wait_till_complete() {
 function _load_metafile_to_client() {
     local metafilepath
     local datafilepath
+    metafilepath="${1}"
+    datafilepath="${2}"
+    echo "$( _datefmt ) : rtxmlrpc loading"
+    echo "                ${metafilepath}"
+    echo "                ${datafilepath}"
     rtxmlrpc -q load.start_verbose '' "${metafilepath}" \
         "d.directory.set=\"${datafilepath}\"" \
         "d.custom1.set=BTNSpamBig" \
         "d.priority.set=2" \
         "d.delete_tied="
-}
-
-
-function _post_process() {
-    local mhash
-    local logfile
-    mhash="${1}"
-    logfile="${2}"
-    echo "$( _datefmt ) : Post-process ${mhash}"
 }
 
 
@@ -51,22 +47,23 @@ completedfile="${staging_dir}/completed.txt"
 
 
 ## Make it a watching program? Never ending?
-#while true
-#do
+while true
+do
     find "${metafile_dir}" -mindepth 1 -name *.torrent -print0 | while read -r -d $'\0' filepath
     do 
         filename=$( basename "${filepath}" )
         mhash="${filename%.torrent}"
         if ( grep -q "${mhash}" "${completedfile}" ); then
             echo "$( _datefmt ) : No action required for ${mhash}" >> "${logfile}"
+            rm -f "${filepath}"
         else
             rt_fname=$( lstor -qo info.name "${filepath}" )
             echo "$( _datefmt ) : Load ${mhash} | ${rt_fname}" >> "${logfile}"
             _load_metafile_to_client "${filepath}" "${download_dir}"
             _wait_till_complete "${mhash}" "${logfile}"
             echo -e "${mhash}\t${rt_fname}" >> "${completedfile}"
-            _post_process "${mhash}"
+            rsync -avz -s -q "${completedfile}" bigferal:archived.txt
         fi
     done
-#    sleep 600
-#done
+    sleep 600
+done
