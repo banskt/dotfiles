@@ -10,6 +10,9 @@ mkdir -p "${logdir}"
 unregistered_logfile="${logdir}/remove-unregistered.log"
 orphan_logfile="${logdir}/remove-orphan.log"
 
+do_full_backup=true
+[[ "${1}" == "--only-clean" ]] && do_full_backup=false
+
 # rTorrent session backup file
 session_bakfile="${HOME}/usr/backup/rtorrent.session/rtsession.backup.$( date +'%Y.%m.%d-%H%M' ).tgz"
 rtxmlrpc -q session.save
@@ -21,16 +24,20 @@ rtxmlrpc -q session.save
 # Solution: cd to path and run tar
 #   Group commands with brackets, so when they have finished
 #   you will still be in your original directory
-session_dir="$( echo $(rtxmlrpc session.path)/ | tr -s / / )"
-( cd "$( dirname "${session_dir}" )" && \
-  tar cfz "${session_bakfile}" "$( basename "${session_dir}")"/*.torrent* )
+if [[ "${do_full_backup}" == "true" ]]; then
+    session_dir="$( echo $(rtxmlrpc session.path)/ | tr -s / / )"
+    ( cd "$( dirname "${session_dir}" )" && \
+        tar cfz "${session_bakfile}" "$( basename "${session_dir}")"/*.torrent* )
+fi
 
 # Delete unregistered torrents
-rt-error --delete --yes >> "${unregistered_logfile}" 2>&1
+rt-unregistered -qo'alias,name' --delete --yes >> "${unregistered_logfile}" 2>&1
 
 # send files from spam and btn-packs
-feral2ashwini all btn-packs BTNarXiv-$( date +"%Y-%m-%d" )
-feral2ashwini inactive btn-spam BTNspam-$( date +"%Y-%m-%d" )
+if [[ "${do_full_backup}" == "true" ]]; then
+    feral2ashwini all btn-packs BTNarXiv-$( date +"%Y-%m-%d" )
+    feral2ashwini inactive btn-spam BTNspam-$( date +"%Y-%m-%d" )
+fi
 
 # Delete orphan data from disk
 tgtdir1="${HOME}/uploads/btn-packs"

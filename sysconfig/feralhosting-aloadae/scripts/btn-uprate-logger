@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+source /media/sdt/banskt/.bashrc
+
+uprate_total=$( rtcontrol alias=/.*landof.tv.*/ up=+0 -qo 'up.sz' --summary | grep "SUM" | awk '{ print $1, $2 }' )
+echo -e "$( date +'%m-%d %H:%M' )\t${uprate_total}"
