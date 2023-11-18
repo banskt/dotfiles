@@ -6,8 +6,14 @@ function is_osx() {
     [[ "$OSTYPE" =~ ^darwin ]] || return 1
 }
 
-export DOTFILES=~/.dotfiles
 
+function is_ubuntu() {
+    cat /proc/version | grep -q "Ubuntu"
+}
+
+[[ -f "${HOME}/.bash_dotfilepath" ]] && source "${HOME}/.bash_dotfilepath"
+[[ -z "${DOTFILES}" ]] && export DOTFILES=~/.dotfiles
+[[ -z ${DOTDEBUG} ]] && export DOTDEBUG=1
 _log_debug() { [[ ${DOTDEBUG} == 0 ]] && echo "${@}"; }
 
 # source one file or all files in one directory, recursively
@@ -30,16 +36,14 @@ dotsrc() {
     fi
 }
 
-loadbashrc() { 
+loadbashrc() {
+    _log_debug "Loading bash commands from ${1} "
     dotsrc ${DOTFILES}/bash/${1}.bashrc; 
+    _log_debug "Loaded bash commands from ${1}"
 }
 
-# load custom environment variable before doing anything
-if [[ -f ${HOME}/.custom_dotfiles/bashrc ]]; then
-    dotsrc ${HOME}/.custom_dotfiles/bashrc
-fi
-
-[[ -z ${DOTDEBUG} ]] && DOTDEBUG=1
+# load custom environment variables
+dotsrc "${CUSTOM_DOTFILES}"
 
 # Common initialization
 loadbashrc common
