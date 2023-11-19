@@ -1,0 +1,251 @@
+#!/usr/bin/env bash
+#
+
+function e_header()   { echo -e "\n\033[1m$@\033[0m"; }
+function e_success()  { echo -e " \033[1;32m✔\033[0m  $@"; }
+function e_error()    { echo -e " \033[1;31m✖\033[0m  $@"; }
+function e_arrow()    { echo -e " \033[1;34m➜\033[0m  $@"; }
+function _vlog()      { [[ "$VERBOSE_FLAG" == 1 ]] && echo "${@}"; }
+function _dbglog()    { [[ "$DEBUG_FLAG" == 1 ]] && echo "${@}"; }
+
+function _show_tags() {
+    local dirpath
+    local tempdir
+    dirpath="${1%/}"
+    #
+    # return if there are no flac files
+    #
+    flac_count="$( find "${dirpath}" -maxdepth 1 -name "*.flac" | wc -l )"
+    if [[ "${flac_count}" == 0 ]]; then
+        echo "No flac files in directory."
+        echo ""
+        return 0
+    fi
+    #
+    # export tags of all flac files to temporary files
+    #
+    tempdir=$( mktemp --tmpdir="${dirpath}" -d vorbis_tags.XXXXX )
+    # double quotes expands now rather than when signalled
+    trap "rm -rf \"${tempdir}\"" EXIT INT QUIT TERM
+    find "${dirpath}" -maxdepth 1 -name "*.flac" -print0 | \
+        while read -r -d $'\0' filepath
+        do
+            filename="$( realpath "${filepath}" --relative-to="${dirpath}" )"
+            tagfilepath="${tempdir}/${filename%.flac}.tagtxt"
+            tagfiledir="$( dirname "${tagfilepath}" )"
+            [[ ! -d "${tagfiledir}" ]] && mkdir -p "${tagfiledir}"
+            [[ -f "${tagfilepath}" ]] && rm -f "${tagfilepath}"
+            metaflac --export-tags-to="${tagfilepath}" "${filepath}"
+        done
+    # read the temporary files and print readable format
+    nflac="$( find "${dirpath}" -name "*.flac" | wc -l )"
+    e_header "Common Tags"
+    ( cd "${tempdir}" && cat *.tagtxt | sort | uniq -c | sed -n -e 's/^ *'"${nflac}"' \(.*\)/\1/p' > "${tempdir}/common.tagtxt" )
+    cat "${tempdir}/common.tagtxt"
+    echo ""
+    e_header "Unique Tags"
+    find "${dirpath}" -maxdepth 1 -name "*.flac" -print0 | \
+        while read -r -d $'\0' filepath
+        do
+            filename="$( realpath "${filepath}" --relative-to="${dirpath}" )"
+            tagfilepath="${tempdir}/${filename%.flac}.tagtxt"
+            e_arrow "$( realpath "${filepath}" --relative-to="${dirpath}" )"
+            grep -v -f "${tempdir}/common.tagtxt" "${tagfilepath}"
+            echo ""
+        done
+    rm -rf "${tempdir}"
+}
+
+function _show_tags_recursive() {
+    local dirpath
+    local flac_count
+    dirpath="${1%/}"
+    echo "##############################"
+    e_header "$( basename "${dirpath}" )"
+    echo "##############################"
+    _show_tags "${dirpath}"
+    find "${dirpath}" -mindepth 1 -type d -print0 | \
+        while read -r -d $'\0' subdirpath
+        do
+            echo "##############################"
+            echo "$( realpath "${subdirpath}" --relative-to="${dirpath}" )"
+            echo "##############################"
+            _show_tags "${subdirpath}"
+        done
+}
+
+# check for ID3v2 tags
+function _has_id3v2tags() {
+    # https://hydrogenaud.io/index.php/topic,97701.0.html
+    # ID3v2 tag is located at the beginning of the file, and starts with a string "ID3".
+    # Therefore you can easily check if it exists by just looking at first 3 byte.
+    local filepath
+    local id3v2bytes
+    filepath="${1}"
+    id3v2bytes=$( dd if="${filepath}" of=/dev/stdout bs=1 count=3 2>/dev/null | tr -d '\0' )
+    [[ "${id3v2bytes}" == "ID3" ]] && return 0 || return 1
+}
+
+# check for ID3v1 tags
+function _has_id3v1tags() {
+    # ID3v1 tag is located at the end of the file, and is of exactly 128 bytes length.
+    # ID3v1 starts with a string "TAG".
+    local filepath
+    local id3v1bytes
+    local fsizebytes
+    filepath="${1}"
+    fsizebytes=$( wc -c < "${filepath}" ) # get file size in bytes
+    seekposition=$((${fsizebytes} - 128)) # seek position: file size - 128
+    id3v1bytes=$( dd if="${filepath}" of=/dev/stdout bs=1 skip=$seekposition count=3 2>/dev/null | tr -d '\0' )
+    [[ "${id3v1bytes}" == "TAG" ]] && return 0 || return 1
+    #echo $id3v1bytes
+}
+
+function _embedded_image_size() {
+    local filepath
+    local image_size
+    filepath="${1}"
+    image_size=$( metaflac --block-type=PICTURE --list "${filepath}" | grep "data[ ]length" | cut -d":" -f2 | tr -d " " )
+    echo "${image_size}"
+}
+
+function _has_valid_md5() {
+    local filepath
+    local md5_streaminfo
+    filepath="${1}"
+    md5_streaminfo=$( metaflac --block-type=STREAMINFO --list "${filepath}" | grep "MD5" | cut -d":" -f2 | tr -d " " )
+    _vlog "    MD5: ${md5_streaminfo}"
+    if ( [[ "${md5_streaminfo}" =~ [0-9a-fA-F]{32} ]] && [[ "${md5_streaminfo}" != "00000000000000000000000000000000" ]] ); then
+        return 0
+    else
+        return 1
+    fi
+}
+
+
+function _check_redquality_file() {
+    local filepath
+    local checkres
+    filepath="${1}"
+    checkres=0
+    if ( _has_id3v1tags "${filepath}" ); then
+        e_error "${filepath} has id3v1 tags"
+        checkres=1
+    fi
+    if ( _has_id3v2tags "${filepath}" ); then
+        e_error "${filepath} has id3v2 tags"
+        checkres=1
+    fi
+    embedded_image_size="$( _embedded_image_size "${filepath}" )"
+    [[ ! -z "${embedded_image_size}" ]] && _vlog "    Embedded Image Size: $( echo "${embedded_image_size}" | numfmt --to=iec )"
+    if [[ "${embedded_image_size}" -gt 1048576 ]]; then
+        e_error "${filepath} has large embedded image ($( echo "${embedded_image_size}" | numfmt --to=iec ))"
+        checkres=1
+    fi
+    if ( ! _has_valid_md5 "${filepath}" ); then
+        e_error "${filepath} has no md5"
+        checkres=1
+    fi
+    if [[ "${checkres}" == 0 ]]; then
+        e_success "${filepath}"
+    fi
+    return $checkres
+}
+
+
+function _check_redquality() {
+    local dirpath
+    local parentdir
+    local flac_count
+    dirpath="${1%/}"
+    #   
+    # return if there are no flac files
+    #   
+    flac_count="$( find "${dirpath}" -maxdepth 1 -name "*.flac" | wc -l )"
+    if [[ "${flac_count}" == 0 ]]; then
+        echo "No flac files in directory."
+        echo ""
+        return 0
+    fi  
+    #   
+    # Check all individual files
+    #
+    e_header "Check ID3 tags, MD5 and size of embedded image"
+    find "${dirpath}" -name "*.flac" -print0 | \
+        while read -r -d $'\0' filepath
+        do
+            _check_redquality_file "${filepath}"
+        done
+    #
+    # Count character length
+    #
+    e_header "Number of characters in filename"
+    parentdir="$( dirname "${dirpath}" )"
+    find "${dirpath}" -name "*.flac" -print0 | \
+        while read -r -d $'\0' filepath
+        do
+            relative_path=$( realpath "${filepath}" --relative-to="${parentdir}" )
+            echo "${#relative_path}" "${relative_path}"
+        done | sort -nr
+}
+
+###############################
+# Input #######################
+###############################
+
+DEBUG_FLAG=0
+VERBOSE_FLAG=0
+
+g_album_path=""
+g_action=""
+g_recursive="false"
+while [[ $# -gt 0 ]]; do
+    key=${1}
+    case ${key} in
+        "-f" | "--album")
+            g_album_path="$( realpath "${2}" )"
+            shift
+            shift;;
+        "--show-tags")
+            g_action="show_tags"
+            shift;;
+        "--check")
+            g_action="check_redquality"
+            shift;;
+        "-r" | "--recursive")
+            g_recursive="true"
+            shift;;
+        "-v" | "--verbose")
+            VERBOSE_FLAG=1
+            shift;;
+        "-d" | "--debug")
+            DEBUG_FLAG=1
+            shift;;
+        "-h" | "--help" | "help")
+            _show_help 0
+            shift;;
+        *)
+            _show_help 1 "Unknown arguments"
+            shift;;
+    esac
+done
+
+g_album_path="${g_album_path:-$( pwd )}"
+g_flac_count="$( find "${g_album_path}" -maxdepth 1 -name "*.flac" | wc -l )"
+[[ "${g_recursive}" == "true" ]] && \
+    g_flac_count="$( find "${g_album_path}" -name "*.flac" | wc -l )"
+
+if [[ "${g_flac_count}" == 0 ]]; then
+    echo "No flac file found in directory ${g_album_path}"
+    echo "Use recursive flag -r if you want to search in subdirectories"
+    exit 0;
+fi
+
+case "${g_action}" in
+    "show_tags")
+        [[ "${g_recursive}" == "true" ]] && _show_tags_recursive "${g_album_path}" || _show_tags "${g_album_path}"
+        ;;
+    "check_redquality")
+        _check_redquality "${g_album_path}"
+        ;;
+esac

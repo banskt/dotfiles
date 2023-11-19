@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+if ( ! pgrep -f "/home/banskt/usr/src/emby/4.7.14/system/EmbyServer.dll" > /dev/null )
+then
+    screen -dmS embyserver /home/banskt/usr/src/dotnet/6.0.10/dotnet \
+        /home/banskt/usr/src/emby/4.7.14/system/EmbyServer.dll \
+            -ffmpeg /usr/bin/ffmpeg \
+            -ffprobe /usr/bin/ffprobe \
+            -programdata /home/banskt/var/lib/emby/programdata
+fi
