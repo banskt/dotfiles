@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+#
+
+albumpath="$( realpath "${1}" )"
+albumname="$( basename "${albumpath}" )"
+
+_scrape_albumname() {
+    local tagfile
+    local album
+    tagfile="${1}"
+    # read all possible album names from ALBUM= or Album= tag
+    # and save in array
+    readarray -t albums < <(grep -i "ALBUM=" "${tagfile}" | cut -f2 -d"=" | sort | uniq)
+    # find the longest common prefix of all strings
+    # https://stackoverflow.com/q/6973088/741734
+    album="$( printf "%s\n" "${albums[@]}" | sed -e '$!{N;s/^\(.*\).*\n\1.*$/\1\n\1/;D;}' )"
+    #printf "%s\n" "${albums[@]}" | grep -zoP '^(.*)(?=.*?\n\1)'
+    echo "${album}"
+}
+
+_scrape_year() {
+    local tagfile
+    local year
+    tagfile="${1}"
+    readarray -t years < <( grep -iE '^(date|year)=(19|20)[0-9]{2}' "${tempfile}" | cut -f2 -d"=" | sort | uniq )
+    year="$( printf "%s\n" "${years[@]}" | sed -e '$!{N;s/^\(.*\).*\n\1.*$/\1\n\1/;D;}' )"
+    echo "${year}"
+}
+
+echo "${albumpath}"
+tempfile="$( mktemp -t common_tags.XXXXXX )"
+redflac -f "${albumpath}" --show-tags -r --common-only --no-fancy > "${tempfile}"
+m_album="$( _scrape_albumname "${tempfile}" )"
+m_year="$( _scrape_year "${tempfile}" )"
+
+# format name
+# mediainfo --Output="Audio;%Format%"
+# bit depth (number only)
+# mediainfo --Output="Audio;%BitDepth%"
+# sampling rate (in Hz)
+# mediainfo --Output="Audio;%SamplingRate%"
+
+if [[ ! -z "${m_album}" ]]; then
+    m_albumname="${m_album}"
+    [[ ! -z "${m_year}" ]] && m_albumname="${m_albumname} (${m_year})"
+    m_albumname="${m_albumname} - FLAC"
+    echo "  ${m_albumname}"
+fi
+
+rm -f "${tempfile}"

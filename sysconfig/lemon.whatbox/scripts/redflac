@@ -1,17 +1,106 @@
 #!/usr/bin/env bash
-#
 
+################################################################################
+#                                redflac                                       #
+#                                                                              #
+# A collection of tools to simplify checking and modifying flac files          #
+#                                                                              #
+# Change History                                                               #
+# 2023/11/20  Saikat Banerjee  Write simple help and documentation             #
+#                              Function to update / change tags                #
+#                              Check for ALBUM tag                             #
+#                                                                              #
+#                                                                              #
+################################################################################
+
+################################################################################
+# Echo and Log                                                                 #
+################################################################################
+DEBUG_FLAG=0
+VERBOSE_FLAG=0
+FANCYFORMAT_FLAG=1
+function _vlog()      { [[ "$VERBOSE_FLAG" == 1 ]] && echo "${@}"; }
+function _dbglog()    { [[ "$DEBUG_FLAG" == 1 ]] && echo "${@}"; }
+function _isfancy()   { [[ "${FANCYFORMAT_FLAG}" == 1 ]] && return 0 || return 1; }
 function e_header()   { echo -e "\n\033[1m$@\033[0m"; }
 function e_success()  { echo -e " \033[1;32m✔\033[0m  $@"; }
 function e_error()    { echo -e " \033[1;31m✖\033[0m  $@"; }
 function e_arrow()    { echo -e " \033[1;34m➜\033[0m  $@"; }
-function _vlog()      { [[ "$VERBOSE_FLAG" == 1 ]] && echo "${@}"; }
-function _dbglog()    { [[ "$DEBUG_FLAG" == 1 ]] && echo "${@}"; }
+function e_warning()  { echo -e " \033[1;33m!\033[0m  $@"; }
+function e_header_hash() {
+    local m_string
+    m_string="${@}"
+    m_underline="$( perl -E "print '#' x ${#m_string}" )"
+    echo -e "##${m_underline}##"
+    echo -e "# \033[1m$@\033[0m #"
+    echo -e "##${m_underline}##"
+}
 
+################################################################################
+# Help                                                                         #
+################################################################################
+function _show_help() {
+    # 
+    # _show_help <exitcode> <message>
+    #
+    # default <exitcode> is 0. Other <exitcode> can be used to show
+    # error <message> combined with this help message and exit with <exitcode>.
+    #
+    local exitcode
+    local progname
+    exitcode=${1:0}
+    if [[ ! -z "${2}" ]]; then
+        echo "Error: ${2}"
+        echo ""
+    fi
+    progname=$( basename "${0}" )
+    echo "${progname}: helper functions to check and modify flac files"
+    echo "Usage:"
+    echo "    ${progname} [ACTIONS] [OPTIONS] [MODIFIERS] [-f | --album] <albumpath>"
+    echo ""
+    echo "    <albumpath> path of album directory"
+    echo ""
+    echo "    [ACTIONS]"
+    echo "    Flags for the primary action to be performed"
+    echo "    --show-tags     pretty print all vorbis tags of all files"
+    echo "    --check         check for common errors"
+    echo "    --change-tags   <KEY=VALUE> requires argument"
+    echo "                    update/change existing tag for all files."
+    echo "                    If value is \"?\" (e.g. TITLE=?), then the"
+    echo "                    value is read from the file."
+    echo "                    (useful for changing case of KEY)"
+    echo ""
+    echo "    [OPTIONS]"
+    echo "    Flags for global options, can be used with any [ACTION]"
+    echo "    -v | --verbose  show verbose output"
+    echo "    -h | --help     show this help and exit"
+    echo "    -d | --debug    show debug output"
+    echo "    -r              recursively operate on files in subdirectories"
+    echo "                    within album directory"
+    echo "                    (default behaviour is non-recursive)"
+    echo "    --no-fancy      do not show fancy output (helpful for scripts)"
+    echo ""
+    echo "    [MODIFIERS]"
+    echo "    Flags which are modifiers for some specific [ACTION]"
+    echo "    (harmless and have no effect with other [ACTION])"
+    echo "    \"--show-tags\":"
+    echo "        --common-only   only output common tags, skip unique tags"
+    echo "        --unique-only   only output unique tags, skip common tags"
+    echo ""
+    [[ "${exitcode}" == 0 ]] && exit 0 || exit 1
+}
+
+################################################################################
+# Show Tags                                                                    #
+################################################################################
 function _show_tags() {
     local dirpath
     local tempdir
+    local show_common
+    local show_unique
     dirpath="${1%/}"
+    show_common="${2:-1}"
+    show_unique="${3:-1}"
     #
     # return if there are no flac files
     #
@@ -22,9 +111,14 @@ function _show_tags() {
         return 0
     fi
     #
+    # absurd request if both show_common=0 and show_unique=0
+    #
+    [[ "${show_common}" == 0 ]] && [[ "${show_unique}" == 0 ]] && return 0
+    #
     # export tags of all flac files to temporary files
     #
-    tempdir=$( mktemp --tmpdir="${dirpath}" -d vorbis_tags.XXXXX )
+    #tempdir=$( mktemp --tmpdir="${dirpath}" -d vorbis_tags.XXXXX )
+    tempdir=$( mktemp -d -t vorbis_tags.XXXXXXX)
     # double quotes expands now rather than when signalled
     trap "rm -rf \"${tempdir}\"" EXIT INT QUIT TERM
     find "${dirpath}" -maxdepth 1 -name "*.flac" -print0 | \
@@ -34,43 +128,83 @@ function _show_tags() {
             tagfilepath="${tempdir}/${filename%.flac}.tagtxt"
             tagfiledir="$( dirname "${tagfilepath}" )"
             [[ ! -d "${tagfiledir}" ]] && mkdir -p "${tagfiledir}"
-            [[ -f "${tagfilepath}" ]] && rm -f "${tagfilepath}"
+            [[ -f "${tagfilepath}" ]]  && rm -f "${tagfilepath}"
             metaflac --export-tags-to="${tagfilepath}" "${filepath}"
         done
-    # read the temporary files and print readable format
+    #
+    # read the temporary files and find common tags
+    #
     nflac="$( find "${dirpath}" -name "*.flac" | wc -l )"
-    e_header "Common Tags"
     ( cd "${tempdir}" && cat *.tagtxt | sort | uniq -c | sed -n -e 's/^ *'"${nflac}"' \(.*\)/\1/p' > "${tempdir}/common.tagtxt" )
-    cat "${tempdir}/common.tagtxt"
-    echo ""
-    e_header "Unique Tags"
-    find "${dirpath}" -maxdepth 1 -name "*.flac" -print0 | \
-        while read -r -d $'\0' filepath
-        do
-            filename="$( realpath "${filepath}" --relative-to="${dirpath}" )"
-            tagfilepath="${tempdir}/${filename%.flac}.tagtxt"
-            e_arrow "$( realpath "${filepath}" --relative-to="${dirpath}" )"
-            grep -v -f "${tempdir}/common.tagtxt" "${tagfilepath}"
-            echo ""
-        done
+    # show common tags?
+    #
+    if [[ "${show_common}" == 1 ]]; then
+        _isfancy && e_header "Common Tags" # do not print header if not fancy
+        cat "${tempdir}/common.tagtxt"
+        echo ""
+    fi
+    # show unique tags?
+    #
+    if [[ "${show_unique}" == 1 ]]; then
+        _isfancy && e_header "Unique Tags"
+        find "${dirpath}" -maxdepth 1 -name "*.flac" -print0 | \
+            while read -r -d $'\0' filepath
+            do
+                filename="$( realpath "${filepath}" --relative-to="${dirpath}" )"
+                tagfilepath="${tempdir}/${filename%.flac}.tagtxt"
+                _isfancy && e_arrow "${filename}" || echo "${filename}"
+                grep -v -f "${tempdir}/common.tagtxt" "${tagfilepath}"
+                echo ""
+            done
+    fi
     rm -rf "${tempdir}"
 }
 
 function _show_tags_recursive() {
     local dirpath
-    local flac_count
+    local dirname
+    local show_common
+    local show_unique
     dirpath="${1%/}"
-    echo "##############################"
-    e_header "$( basename "${dirpath}" )"
-    echo "##############################"
-    _show_tags "${dirpath}"
+    show_common="${2:-1}"
+    show_unique="${3:-1}"
+    dirname="$( basename "${dirpath}" )"
+
+    _isfancy && e_header_hash "${dirname}" || echo "${dirname}"
+    _show_tags "${dirpath}" "${show_common}" "${show_unique}"
     find "${dirpath}" -mindepth 1 -type d -print0 | \
         while read -r -d $'\0' subdirpath
         do
-            echo "##############################"
-            echo "$( realpath "${subdirpath}" --relative-to="${dirpath}" )"
-            echo "##############################"
-            _show_tags "${subdirpath}"
+            subdirname="$( realpath "${subdirpath}" --relative-to="${dirpath}" )"
+            _isfancy && e_header_hash "${subdirname}" || echo "${subdirname}"
+            _show_tags "${subdirpath}" "${show_common}" "${show_unique}"
+        done
+}
+
+function _change_tags() {
+    local dirpath
+    local tagkeyval
+    local tagkey
+    local tagval
+    dirpath="${1%/}"
+    tagkeyval="${2}"
+    is_recursive="${3:-0}"
+    tagkey="$( cut -f1 -d"=" <<<"${tagkeyval}" )"
+    tagval="$( cut -f2 -d"=" <<<"${tagkeyval}" )"
+    [[ -z "${tagkey}" ]] && [[ -z "${tagval}" ]] && return 1
+    recursion_flag="-maxdepth 1"
+    [[ "${is_recursive}" == 1 ]] && recursion_flag=""
+    find "${dirpath}" ${recursion_flag} -name "*.flac" -print0 | \
+        while read -r -d $'\0' filepath
+        do
+            if [[ "${tagval}" == "?" ]]; then
+                f_tagval="$( metaflac --show-tag="${tagkey}" "${filepath}" | cut -f2 -d"=" )"
+            else
+                f_tagval="${tagval}"
+            fi
+            metaflac --remove-tag="${tagkey}" "${filepath}"
+            metaflac --set-tag "${tagkey}=${f_tagval}" "${filepath}"
+            f_tagval=""
         done
 }
 
@@ -101,6 +235,18 @@ function _has_id3v1tags() {
     #echo $id3v1bytes
 }
 
+function _has_alltags() {
+    local filepath
+    filepath="${1}"
+    readarray -t tagkeys < <(metaflac --export-tags-to=- "${filepath}" | cut -d"=" -f1 |  tr '[:upper:]' '[:lower:]')
+    is_tag_missing=0
+    [[ ! " ${tagkeys[*]} " =~ " artist " ]]      && is_tag_missing=1 
+    [[ ! " ${tagkeys[*]} " =~ " album " ]]       && is_tag_missing=1 
+    [[ ! " ${tagkeys[*]} " =~ " title " ]]       && is_tag_missing=1 
+    [[ ! " ${tagkeys[*]} " =~ " tracknumber " ]] && is_tag_missing=1 
+    return ${is_tag_missing}
+}
+
 function _embedded_image_size() {
     local filepath
     local image_size
@@ -127,27 +273,32 @@ function _check_redquality_file() {
     local filepath
     local checkres
     filepath="${1}"
+    filename="$( basename "${filepath}" )"
     checkres=0
     if ( _has_id3v1tags "${filepath}" ); then
-        e_error "${filepath} has id3v1 tags"
+        e_error "${filename} has id3v1 tags"
         checkres=1
     fi
     if ( _has_id3v2tags "${filepath}" ); then
-        e_error "${filepath} has id3v2 tags"
+        e_error "${filename} has id3v2 tags"
         checkres=1
     fi
     embedded_image_size="$( _embedded_image_size "${filepath}" )"
     [[ ! -z "${embedded_image_size}" ]] && _vlog "    Embedded Image Size: $( echo "${embedded_image_size}" | numfmt --to=iec )"
     if [[ "${embedded_image_size}" -gt 1048576 ]]; then
-        e_error "${filepath} has large embedded image ($( echo "${embedded_image_size}" | numfmt --to=iec ))"
+        e_error "${filename} has large embedded image ($( echo "${embedded_image_size}" | numfmt --to=iec ))"
         checkres=1
     fi
     if ( ! _has_valid_md5 "${filepath}" ); then
-        e_error "${filepath} has no md5"
+        e_error "${filename} has no md5"
+        checkres=1
+    fi
+    if ( ! _has_alltags "${filepath}" ); then
+        e_error "${filename} is missing required tags"
         checkres=1
     fi
     if [[ "${checkres}" == 0 ]]; then
-        e_success "${filepath}"
+        e_success "${filename}"
     fi
     return $checkres
 }
@@ -157,11 +308,16 @@ function _check_redquality() {
     local dirpath
     local parentdir
     local flac_count
+    local recursion_flag
+    local is_recursive
     dirpath="${1%/}"
+    is_recursive="${2:-0}"
     #   
     # return if there are no flac files
-    #   
-    flac_count="$( find "${dirpath}" -maxdepth 1 -name "*.flac" | wc -l )"
+    #
+    recursion_flag="-maxdepth 1"
+    [[ "${is_recursive}" == 1 ]] && recursion_flag=""
+    flac_count="$( find "${dirpath}" ${recursion_flag} -name "*.flac" | wc -l )"
     if [[ "${flac_count}" == 0 ]]; then
         echo "No flac files in directory."
         echo ""
@@ -171,17 +327,60 @@ function _check_redquality() {
     # Check all individual files
     #
     e_header "Check ID3 tags, MD5 and size of embedded image"
-    find "${dirpath}" -name "*.flac" -print0 | \
+    find "${dirpath}" ${recursion_flag} -name "*.flac" -print0 | \
         while read -r -d $'\0' filepath
         do
             _check_redquality_file "${filepath}"
         done
     #
+    # Check album tag
+    #
+    e_header "Check ALBUM tag (must be same for all files)"
+    readarray -t albumnames < \
+        <(find "${dirpath}" ${recursion_flag} -name "*.flac" -print0 | \
+          xargs -0 -I{} metaflac --show-tag=ALBUM {} | \
+          cut -f2 -d"=" | sort | uniq)
+    if [[ "${#albumnames[@]}" == 1 ]]; then
+        e_success "${albumnames[0]}"
+    else
+        e_error "Multiple album tags. Are they violating rule 2.3.18.3?"
+        for ((i = 0; i < ${#albumnames[@]}; i++)); do
+            echo "    → ${albumnames[i]}"
+        done
+    fi
+    #
+    # Check bitdepth and sample rate
+    #
+    e_header "Check Bit Depths and Sample Rates"
+    readarray -t bitdepths < \
+        <(find "${dirpath}" ${recursion_flag} -name "*.flac" -print0 | \
+          xargs -0 -I{} mediainfo --Output="Audio;%BitDepth%" {} | sort | uniq)
+    if [[ "${#bitdepths[@]}" == 1 ]]; then
+        e_success "All files have same bit depth: ${bitdepths[0]} bits"
+    else
+        e_warning "Different bit depths. Check Hybrid Web rules 2.11.1.3"
+        for ((i = 0; i < ${#bitdepths[@]}; i++)); do
+            echo "    → ${bitdepths[i]} bits"
+        done
+    fi
+
+    readarray -t samplerates < \
+        <(find "${dirpath}" ${recursion_flag} -name "*.flac" -print0 | \
+          xargs -0 -I{} mediainfo --Output="Audio;%SamplingRate%" {} | sort | uniq)
+    if [[ "${#samplerates[@]}" == 1 ]]; then
+        e_success "All samples have same sample rate $( echo ${samplerates[0]} | numfmt --to=si )Hz"
+    else
+        e_warning "Different sample rates. Check Hybrid Web rules 2.11.1.3"
+        for ((i = 0; i < ${#samplerates[@]}; i++)); do
+            echo "    → $( echo ${samplerates[i]} | numfmt --to=si )Hz"
+        done
+    fi
+    #
     # Count character length
     #
     e_header "Number of characters in filename"
     parentdir="$( dirname "${dirpath}" )"
-    find "${dirpath}" -name "*.flac" -print0 | \
+    find "${dirpath}" ${recursion_flag} -name "*.flac" -print0 | \
         while read -r -d $'\0' filepath
         do
             relative_path=$( realpath "${filepath}" --relative-to="${parentdir}" )
@@ -193,12 +392,12 @@ function _check_redquality() {
 # Input #######################
 ###############################
 
-DEBUG_FLAG=0
-VERBOSE_FLAG=0
 
 g_album_path=""
 g_action=""
-g_recursive="false"
+g_show_common_tags=1
+g_show_unique_tags=1
+g_recursive=0
 while [[ $# -gt 0 ]]; do
     key=${1}
     case ${key} in
@@ -212,8 +411,22 @@ while [[ $# -gt 0 ]]; do
         "--check")
             g_action="check_redquality"
             shift;;
+        "--change-tags")
+            g_action="change_common_tags"
+            g_tag_keyval="${2}"
+            shift
+            shift;;
         "-r" | "--recursive")
-            g_recursive="true"
+            g_recursive=1
+            shift;;
+        "--common-only")
+            g_show_unique_tags=0
+            shift;;
+        "--unique-only")
+            g_show_common_tags=0
+            shift;;
+        "--no-fancy")
+            FANCYFORMAT_FLAG=0
             shift;;
         "-v" | "--verbose")
             VERBOSE_FLAG=1
@@ -232,7 +445,7 @@ done
 
 g_album_path="${g_album_path:-$( pwd )}"
 g_flac_count="$( find "${g_album_path}" -maxdepth 1 -name "*.flac" | wc -l )"
-[[ "${g_recursive}" == "true" ]] && \
+[[ "${g_recursive}" == "1" ]] && \
     g_flac_count="$( find "${g_album_path}" -name "*.flac" | wc -l )"
 
 if [[ "${g_flac_count}" == 0 ]]; then
@@ -243,9 +456,14 @@ fi
 
 case "${g_action}" in
     "show_tags")
-        [[ "${g_recursive}" == "true" ]] && _show_tags_recursive "${g_album_path}" || _show_tags "${g_album_path}"
+        [[ "${g_recursive}" == "1" ]] && \
+            _show_tags_recursive "${g_album_path}" "${g_show_common_tags}" "${g_show_unique_tags}" || \
+            _show_tags "${g_album_path}" "${g_show_common_tags}" "${g_show_unique_tags}"
         ;;
     "check_redquality")
-        _check_redquality "${g_album_path}"
+        _check_redquality "${g_album_path}" "${g_recursive}"
+        ;;
+    "change_common_tags")
+        _change_tags "${g_album_path}" "${g_tag_keyval}" "${g_recursive}"
         ;;
 esac

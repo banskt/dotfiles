@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+#
+
+# If this file is sourced, then source the functions and exit.
+# Otherwise, run the commands
+(return 0 2>/dev/null) && is_sourced=1 || is_sourced=0
+
+function e_header()   { echo -e "\n\033[1m$@\033[0m"; }
+function e_success()  { echo -e " \033[1;32m✔\033[0m  $@"; }
+function e_error()    { echo -e " \033[1;31m✖\033[0m  $@"; }
+function e_arrow()    { echo -e " \033[1;34m➜\033[0m  $@"; }
+
+function _is_organized() {
+    local albumpath
+    local dstdir
+    albumpath="${1}"
+    dstdir="${2}"
+    [[ -f "${albumpath}/.ignore_selforg" ]] && return 0
+    local tempfile
+    tempfile=$( mktemp -t fdupes_result.XXXXX )
+    trap "rm -f \"${tempfile}\"" EXIT INT QUIT TERM
+    fdupes --hardlink --recurse: "${albumpath}" "${dstdir}" > "${tempfile}"
+    unlinked_files="$( comm -13 <(sort -u "${tempfile}") <(find "${albumpath}" -type f | sort -u) )"
+    rm -f "${tempfile}"
+    [[ -z "${unlinked_files}" ]] && return 0 || return 1
+}
+
+
+function _suggest_albumname() {
+    local albumpath
+    local tempdir
+    tempdir=$( mktemp -d music_albumname.XXXXX )
+    #trap "rm -rf \"${tempdir}\"" EXIT INT QUIT TERM
+    redflac --show-tags --common-only --hide-headers --album "${albumpath}" >> "${tempdir}/common_tags.txt"
+    find "${albumpath}" -name "*.flac" -print0 | \
+        while read -d $'\0' -r filepath
+        do
+            metaflac --show-tag=ALBUM "${filepath}" | cut -f2 -d"=" >> "${tempdir}/albumname.txt"
+            redflac 
+        done
+    echo "Suggested name: ${albumname} (${year}) - ${format} {${bitdepth}b-${samplingrate}kHz}"
+}
+
+
+function _do_organize() {
+    local albumpath
+    local dstdir
+    local is_linked
+    local currentpath
+    local user_response
+    albumpath="${1}"
+    dstdir="${2}"
+    is_linked="false"
+    currentpath="${dstdir}"
+    #_suggest_albumname "${albumpath}"
+    while [[ "${is_linked}" != "true" ]]
+    do
+        echo "Destination path: ${currentpath}"
+        echo "Choose one option below:"
+        readarray -t dirs < <(find "${currentpath}" -mindepth 1 -maxdepth 1 -type d -printf '%P\n')
+        #
+        # Get response from user
+        let i=1
+        for dir in "${dirs[@]}"; do
+            echo "$((i++))  ${dir}"
+        done
+        echo -e "$((i++))  Create new directory"
+        echo -e "$((i++))  This is the destination"
+        read -p "Enter one option: " user_response 0</dev/tty
+        echo "Your response is ${user_response}"
+        #
+        # Analyze response from user
+        let i=1
+        whichdir=""
+        for dir in "${dirs[@]}"; do
+            [[ "${user_response}" == "$(( i++ ))" ]] && whichdir="${dir}"
+        done
+        if [[ "${user_response}" == "$(( i++ ))" ]]; then
+            read -p "Enter name of new directory: " whichdir 0</dev/tty
+        fi
+        if [[ "${user_response}" == "$(( i++ ))" ]]; then
+            echo "Copy to → ${currentpath}"
+            cp -lR "${albumpath}"/* "${currentpath}/"
+            touch "${albumpath}/.ignore_selforg"
+            is_linked="true"
+        fi
+        if [[ ! -z "${whichdir}" ]]; then
+            currentpath="${currentpath}/${whichdir}"
+            [[ ! -d "${currentpath}" ]] && mkdir -p "${currentpath}"
+            continue
+        fi
+    done
+}
+
+# =================================================
+# EXIT now if sourced, else continue
+# =================================================
+[[ "$is_sourced" == 1 ]] && return
+
+
+srcdir="$( realpath "${1}" )"
+dstdir="$( realpath "${2}" )"
+
+e_header "Source"
+echo "${srcdir}"
+
+e_header "Destination"
+echo "${dstdir}"
+
+e_header "Organize albums"
+
+is_skip_all="false"
+find "${srcdir}" -mindepth 1 -maxdepth 1 -type d -print0 | \
+    while read -r -d $'\0' albumpath
+    do
+        albumname=$( basename "${albumpath}" )
+        if ( _is_organized "${albumpath}" "${dstdir}" ); then
+            e_success "${albumname}"
+        else
+            e_error "${albumname}"
+            if [[ ! "${is_skip_all}" == "true" ]]
+            then
+                e_arrow "Do you want to organize this file? [y] Yes [n] No [s] Skip all"
+                #read -u 2 -p "Enter one option: " user_response
+                read -p "Enter one option: " user_response 0</dev/tty
+                [[ "${user_response}" == "s" ]] && is_skip_all="true"
+                [[ "${user_response}" == "y" ]] && _do_organize "${albumpath}" "${dstdir}"
+            fi
+        fi
+    done
