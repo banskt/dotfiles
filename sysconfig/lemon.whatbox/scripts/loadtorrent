@@ -1,0 +1,239 @@
+#!/usr/bin/env bash
+
+function _is_verbose() {
+    [[ "$VERBOSE_FLAG" == 1 ]]
+}
+
+function _is_debug() {
+    [[ "$DEBUG_FLAG" == 1 ]]
+}
+
+
+function _vlog() {
+    { _is_verbose && echo "${@}"; }
+}
+
+
+function _dbglog() {
+    { _is_debug && echo "${@}"; }
+}
+
+
+function _show_help() {
+    local exitcode
+    local myname
+    exitcode=${1}
+    if [[ ! -z "${2}" ]]; then
+        echo "Error: ${2}"
+        echo ""
+    fi
+    myname=$( basename "${0}" )
+    echo "${myname}: load metafile to rtorrent client"
+    echo "Usage:"
+    echo "    ${myname} [-m | --metafile] <path-to-metafile>"
+    echo "        [-f | --datafile] <path-to-datafile/s>"
+    echo "        [-t | --tag] <tag (optional)>"
+    echo "        [-v] [-d] [-h | --help]"
+    echo ""
+    echo "    <path-to-metafile> the metafile (.torrent) to be loaded"
+    echo ""
+    echo "    <path-to-datafile/s> path of the data file/directory"
+    echo ""
+    echo "    <tag> label for rutorrent (optional)"
+    echo ""
+    echo "    [OPTIONS]"
+    echo "    -v            show verbose output"
+    echo "    -h | --help   show this help and exit"
+    echo "    -d            show debug output"
+    echo "    --info        use info.txt for bulk loading metafiles"
+    echo "                  see \"Bulk Transfer\" below for details."
+    echo ""
+    echo "Bulk transfer:"
+    echo "    Multiple metafiles can be loaded using --info option."
+    echo "    When using this option, one must specify a directory"
+    echo "    containing the metafiles (instead of a single metafile),"
+    echo "    and a relative path to the download directory, for example:"
+    echo ""
+    echo "        ${myname} --info -m <metadir> -f <datadir>"
+    echo ""
+    echo "    The directory for metafiles (<metadir> in the above example)"
+    echo "    must contain a file named \"info.txt\" where each line is:"
+    echo "        <metaprefix1>    <relative.data.path1>"
+    echo "        <metaprefix2>    <relative.data.path2>"
+    echo "        ..."
+    echo "    For each line, ${myname} loads \"<metadir>/<metaprefix1>.torrent\""
+    echo "    with fast-resume set to \"<datadir>/<relative.data.path>\"."
+    echo "    This is useful to transfer metafiles between different servers with"
+    echo "    different parent structure (e.g. /mnt/files vs /home/user/files)"
+    echo "    but same relative download paths. This also provides a simple interface"
+    echo "    to load thousands of metafiles from one server to another."
+    echo ""
+    echo "    Hint: Use 'collecttorrents' to collect all metafiles tied to data in a"
+    echo "    given path and automatically generate the \"info.txt\" file."
+    echo ""
+    [[ "${exitcode}" == 0 ]] && exit 0 || exit 1
+}
+
+## Load a torrent with a specified download directory, 
+## priority 2 (normal), and rutorrent tag <tag>
+## 
+## Usage:
+##     _load_single_torrent /path/to/metafile /path/to/datadir
+## 
+## All XMLPPC commands (with a few exceptions like system.listMethods) 
+## take an info hash as the first argument when called over the API,
+## to uniquely identify the target object. 
+## 'Target' is also the term used for that first parameter 
+## in error messages like Unsupported target type found, 
+## and that message is the one you’ll most likely get 
+## if you forgot to provide one.
+## Commands that do not target a specific item still need to have one 
+## (in newer versions of rTorrent), so provide an empty string 
+## as a placeholder in those cases.
+## Read how to configure targets: 
+##     https://github.com/rakshasa/rtorrent/wiki/RPC-Utility-XMLRPC2SCGI
+##
+## There is no comprehensive documentation for rtorrent,
+## To get started look at the list of all commands:
+##     https://github.com/rakshasa/rtorrent/wiki/rTorrent-0.9-Comprehensive-Command-list-(WIP)
+##     https://rtorrent-docs.readthedocs.io/en/latest/genindex.html
+##
+function _load_single_torrent() {
+    # full path of the torrent file
+    local metapath
+    metapath="${1}"
+    # full path of the data file/directory
+    local datapath
+    datapath="${2}"
+    # parent directory where the data can be found
+    local rt_datapath
+    rt_datapath=$( dirname "${datapath}" )
+    # tag for the entry
+    local rt_tag
+    rt_tag="${3}"
+    # a new file for the fast resume information
+    local fastpath
+    fastpath="${metapath%.torrent}.chtor_fastresume.torrent"
+    # name of the data file
+    local fname
+    fname=$( lstor -qo info.name "${metapath}" )
+
+    _dbglog "  Loading single torrent."
+    _dbglog "      metapath: ${metapath}"
+    _dbglog "      datadir: ${rt_datapath}"
+    _dbglog "      info.name: ${fname}"
+    _dbglog "      datapath: ${datapath}"
+    _dbglog "      fastresume_path: ${fastpath}"
+
+    # do not change the original torrent file
+    [[ -f "${fastpath}" ]] || cp "${metapath}" "${fastpath}"
+
+    # add fast resume information
+    if ( chtor -q --fast-resume="${datapath}" "${fastpath}" ); then
+        _vlog "${fname} | Added fast resume information. Loading torrent..."
+        _vlog "${fname} | Path: ${rt_datapath}"
+
+        # rtorrent requires parent directory
+        if ( rtxmlrpc -q load.start_verbose '' "${fastpath}" \
+                            "d.directory.set=\"${rt_datapath}\"" \
+                            "d.custom1.set=${rt_tag}" \
+                            "d.priority.set=2" \
+                            "d.delete_tied=" ); then
+            echo "${fname} | Loaded successfully"
+        else
+            _vlog "${fname} | ERROR: rtxmlrpc failed to load torrent."
+        fi
+    else
+        _vlog "${fname} | ERROR: Failed to add fast resume information."
+    fi
+}
+
+#
+# Wrapper function to read info.txt within metadir
+# and load each torrent sequentially.
+# Usage:
+#     _read_info_and_load <metadir> <datadir> <tag>
+#
+#     <metadir> absolute path of directory containing
+#         info.txt and all torrent files
+#     <datadir> absolute path of torrent data.
+#         This must be the parent directory to which
+#         the path from info.txt will be appended.
+#     <tag> (optional) rutorrent tag
+function _read_info_and_load() {
+    local metadir
+    local datadir
+    local rt_tag
+    metadir="${1%/}"
+    datadir="${2%/}"
+    rt_tag="${3}"
+    _dbglog "  _read_info_and_load"
+    _dbglog "      metadir: ${metadir}"
+    _dbglog "      datadir: ${datadir}"
+    while read -r rtinfo; do
+        mhash=$( echo "${rtinfo}" | cut -f1 )
+        fpath=$( echo "${rtinfo}" | cut -f2 )
+        metapath="${metadir}"/"${mhash}.torrent"
+        datapath="${datadir}"/"${fpath}"
+        _load_single_torrent "${metapath}" "${datapath}" "${rt_tag}"
+    done < "${metadir}/info.txt"
+}
+
+###############################
+# Input #######################
+###############################
+
+DEBUG_FLAG=0
+VERBOSE_FLAG=0
+IS_INFO_FLAG=0
+g_metapath=""
+g_datapath=""
+while [[ $# -gt 0 ]]; do
+    key=${1}
+    case ${key} in
+        "-m" | "--metafile")
+            g_metapath="$( realpath "${2}" )"
+            shift
+            shift;;
+        "-f" | "--datafile")
+            g_datapath="$( realpath "${2}" )"
+            shift
+            shift;;
+        "-t" | "--tag")
+            g_tag="${2}"
+            shift
+            shift;;
+        "--info")
+            IS_INFO_FLAG=1
+            shift;;
+        "-v" | "--verbose")
+            VERBOSE_FLAG=1
+            shift;;
+        "-d" | "--debug")
+            DEBUG_FLAG=1
+            shift;;
+        "-h" | "--help" | "help")
+            _show_help 0
+            shift;;
+        *)
+            _show_help 1 "Unknown arguments"
+            shift;;
+    esac
+done
+
+{ [[ -z "${g_metapath}" ]] || [[ -z "${g_datapath}" ]]; } && _show_help 1 "Wrong or empty arguments"
+[[ ! -e "${g_datapath}" ]] && { echo "Error: Datapath not found"; exit 1; }
+
+
+_dbglog "Loading $(basename ${g_metapath})"
+_dbglog "    Metapath: ${g_metapath}"
+_dbglog "    Datapath: ${g_datapath}"
+
+if [[ "${IS_INFO_FLAG}" == "1" ]]; then
+    [[ ! -f "${g_metapath}/info.txt" ]] && { echo "Error: info.txt file not found in ${g_metapath}"; exit 1; }
+    echo "Loading torrents from INFO file"
+    _read_info_and_load "${g_metapath}" "${g_datapath}" "${g_tag}"
+else
+    [[ ! -f "${g_metapath}" ]] && { echo "Error: Metafile not found"; exit 1; }
+    _load_single_torrent "${g_metapath}" "${g_datapath}" "${g_tag}"
+fi

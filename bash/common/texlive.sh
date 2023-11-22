@@ -33,12 +33,13 @@ update-texlive-repository () {
 
 if is_osx; then
     [[ -z "${TEXLIVESRC}" ]] && TEXLIVESRC="/opt/texlive/2023"
-    export INFOPATH="${TEXLIVESRC}/texmf-dist/doc/info:$INFOPATH"
-    export MANPATH="${TEXLIVESRC}/texmf-dist/doc/man:$MANPATH"
-    export PATH="${TEXLIVESRC}/bin/universal-darwin:$PATH"
+    TEXLIVEPATH="${TEXLIVESRC}/bin/universal-darwin"
 else
     [[ -z "${TEXLIVESRC}" ]] && TEXLIVESRC="/opt/texlive/2020"
-    export INFOPATH="${TEXLIVESRC}/texmf-dist/doc/info:$INFOPATH"
-    export MANPATH="${TEXLIVESRC}/texmf-dist/doc/man:$MANPATH"
-    export PATH="${TEXLIVESRC}/bin/x86_64-linux:$PATH"
+    TEXLIVEPATH="${TEXLIVESRC}/bin/x86_64-linux"
+fi
+if [[ -d "${TEXLIVESRC}" ]]; then
+	export INFOPATH="${TEXLIVESRC}/texmf-dist/doc/info:$INFOPATH"
+	export MANPATH="${TEXLIVESRC}/texmf-dist/doc/man:$MANPATH"
+	export PATH="${TEXLIVEPATH}:$PATH"
 fi

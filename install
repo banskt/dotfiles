@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 
-DOTFILES=~/.dotfiles
+# If this file is sourced, then source the functions and exit.
+# Otherwise, run the commands
+(return 0 2>/dev/null) && is_sourced=1 || is_sourced=0
+
+[[ -f "${HOME}/.bash_dotfilepath" ]] && source "${HOME}/.bash_dotfilepath" 
+[[ -z "${DOTFILES}" ]] && export DOTFILES=~/.dotfiles
 DRYRUN=${1:-false}
 
 _dryrun() {
@@ -90,6 +95,11 @@ function backup_and_link() {
 
 BACKUPDIR="${HOME}/.backdotfiles/$(date "+%Y_%m_%d-%H_%M_%S")/"
 BACKUPFLAG=
+
+# =================================================
+# EXIT now if sourced, else continue
+# =================================================
+[[ "$is_sourced" == 1 ]] && return
 
 backup_and_link .bashrc bash/bashrc
 backup_and_link .ssh/config ssh/config
