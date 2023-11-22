@@ -155,14 +155,16 @@ Host ashwini
     IdentityFile ~/.ssh/ashwini_key
     IdentitiesOnly yes
 
-# AWS EC2
-Host falguni
-    Hostname ec2-3-81-229-132.compute-1.amazonaws.com
+# Whatbox Media
+Host whatbox
+    Hostname lemon.whatbox.ca
     User banskt
     PreferredAuthentications publickey
     PubkeyAuthentication yes
-    IdentityFile ~/.ssh/aws_key
+    IdentityFile ~/.ssh/whatbox_key
     IdentitiesOnly yes
+
+
 
 ## default for all ##
 Host *
