@@ -19,3 +19,11 @@
 
 export PATH="${HOME}/usr/scripts:${HOME}/usr/bin:${PATH}"
 export EDITOR="/usr/bin/vim"
+
+#function realpath() {
+#    realpath $@
+#    #realpath "${@}" | sed 's/\/mnt\/mpath.\/banskt/\/home\/banskt/g'
+#}
+function realpath() {
+    /usr/bin/realpath "${@}" | sed 's/\/mnt\/mpath.\/banskt/\/home\/banskt/g'
+}

@@ -72,6 +72,14 @@ Note, however, neither `rshd` nor `sshd` generally invoke the shell with `--norc
 
 ![Bash startup file loading decision](../images/bash_startup_decision.png?raw=true "Bash startup file loading decision")
 
+## How to load bashrc in non-interactive non-login shell on a remote server?
+
+Set `BASH_ENV` to point to your `.bashrc`. That’s it!
+In `~/.bash_profile` (or `~/.bash_login` or `~/.profile`, whichever is executed during login), set
+```
+export BASH_ENV="${HOME}/.bashrc"
+```
+
 ## Quirks
 - `bash --norc` loads the environment variables already in the session.
 - `${VAR-foo}`  equals `foo` if `VAR` is unset. (remains empty if empty)

@@ -69,6 +69,9 @@ function _show_help() {
     echo "                    If value is \"?\" (e.g. TITLE=?), then the"
     echo "                    value is read from the file."
     echo "                    (useful for changing case of KEY)"
+    echo "    --fix-md5       Assing MD5 to STREAMINFO."
+    echo "                    This ACTION requires an output directory"
+    echo "                    see MODIFIER [--out]."
     echo ""
     echo "    [OPTIONS]"
     echo "    Flags for global options, can be used with any [ACTION]"
@@ -86,6 +89,9 @@ function _show_help() {
     echo "    \"--show-tags\":"
     echo "        --common-only   only output common tags, skip unique tags"
     echo "        --unique-only   only output unique tags, skip common tags"
+    echo "    \"--fix-md5\":"
+    echo "        --out           directory to store the modified files"
+    echo "        --dryrun        see what will will happen, do not modify files"
     echo ""
     [[ "${exitcode}" == 0 ]] && exit 0 || exit 1
 }
@@ -181,6 +187,9 @@ function _show_tags_recursive() {
         done
 }
 
+################################################################################
+# Change Tags                                                                  #
+################################################################################
 function _change_tags() {
     local dirpath
     local tagkeyval
@@ -199,6 +208,7 @@ function _change_tags() {
         do
             if [[ "${tagval}" == "?" ]]; then
                 f_tagval="$( metaflac --show-tag="${tagkey}" "${filepath}" | cut -f2 -d"=" )"
+                [[ "$f_tagval" =~ [0-9]* ]] && f_tagval="$( sed 's/^0*//g' <<<"${f_tagval}" )"
             else
                 f_tagval="${tagval}"
             fi
@@ -208,6 +218,9 @@ function _change_tags() {
         done
 }
 
+################################################################################
+# Functions for checking files                                                 #
+################################################################################
 # check for ID3v2 tags
 function _has_id3v2tags() {
     # https://hydrogenaud.io/index.php/topic,97701.0.html
@@ -235,17 +248,41 @@ function _has_id3v1tags() {
     #echo $id3v1bytes
 }
 
-function _has_alltags() {
+function _has_tags() {
     local filepath
+    local taglist
+    local result
     filepath="${1}"
+    taglist="${2}"
     readarray -t tagkeys < <(metaflac --export-tags-to=- "${filepath}" | cut -d"=" -f1 |  tr '[:upper:]' '[:lower:]')
-    is_tag_missing=0
-    [[ ! " ${tagkeys[*]} " =~ " artist " ]]      && is_tag_missing=1 
-    [[ ! " ${tagkeys[*]} " =~ " album " ]]       && is_tag_missing=1 
-    [[ ! " ${tagkeys[*]} " =~ " title " ]]       && is_tag_missing=1 
-    [[ ! " ${tagkeys[*]} " =~ " tracknumber " ]] && is_tag_missing=1 
-    return ${is_tag_missing}
+    readarray -t reqkeys < <(echo "${taglist}" | sed 's/,/\n/g' | sed 's/ *$//g' | sed 's/^ *//g' |  tr '[:upper:]' '[:lower:]')
+    result=""
+    for ((i = 0; i < ${#reqkeys[@]}; i++)); do
+        [[ ! " ${tagkeys[*]} " =~ " ${reqkeys[i]} " ]] && is_tag_missing=1 || is_tag_missing=0
+        result="${result}${is_tag_missing}"
+    done
+    echo "${result}"
 }
+
+
+function _has_required_tags() {
+    local filepath
+    local res
+    filepath="${1}"
+    res="$( _has_tags "${filepath}" "ARTIST,ALBUM,TITLE,TRACKNUMBER" )"
+    [[ "${res}" == "0000" ]] && return 0 || return 1
+}
+
+function _has_dateyear_tags() {
+    local filepath
+    local res
+    filepath="${1}"
+    res="$( _has_tags "${filepath}" "DATE,YEAR" )"
+    r_dateyear="${res:0:1}"
+    [[ ! "${r_dateyear}" == "0" ]] && r_dateyear="${res:1:1}"
+    [[ "${r_dateyear}" == "0" ]] && return 0 || return 1
+}
+
 
 function _embedded_image_size() {
     local filepath
@@ -269,10 +306,15 @@ function _has_valid_md5() {
 }
 
 
+################################################################################
+# Combine checks for RED upload                                                #
+################################################################################
 function _check_redquality_file() {
     local filepath
+    local check_composer_tag
     local checkres
     filepath="${1}"
+    check_composer_tag="${2}"
     filename="$( basename "${filepath}" )"
     checkres=0
     if ( _has_id3v1tags "${filepath}" ); then
@@ -293,9 +335,19 @@ function _check_redquality_file() {
         e_error "${filename} has no md5"
         checkres=1
     fi
-    if ( ! _has_alltags "${filepath}" ); then
-        e_error "${filename} is missing required tags"
+    if ( ! _has_required_tags "${filepath}" ); then
+        e_error "${filename} is missing one of the required tags: ARTIST | ALBUM | TITLE | TRACKNUMBER"
         checkres=1
+    fi
+    if ( ! _has_dateyear_tags "${filepath}" ); then
+        e_warning "${filename} is missing DATE/YEAR optional tag"
+        checkres=1
+    fi
+    if [[ "${check_composer_tag}" == 1 ]]; then
+        if [[ $( _has_tags "${filepath}" "COMPOSER" ) == "1" ]]; then
+            e_warning "${filename} has no COMPOSER tag."
+            checkres=1
+        fi
     fi
     if [[ "${checkres}" == 0 ]]; then
         e_success "${filename}"
@@ -306,12 +358,14 @@ function _check_redquality_file() {
 
 function _check_redquality() {
     local dirpath
+    local is_recursive
+    local check_composer_tag
     local parentdir
     local flac_count
     local recursion_flag
-    local is_recursive
     dirpath="${1%/}"
     is_recursive="${2:-0}"
+    check_composer_tag="${3:-1}"
     #   
     # return if there are no flac files
     #
@@ -330,7 +384,7 @@ function _check_redquality() {
     find "${dirpath}" ${recursion_flag} -name "*.flac" -print0 | \
         while read -r -d $'\0' filepath
         do
-            _check_redquality_file "${filepath}"
+            _check_redquality_file "${filepath}" "${check_composer_tag}"
         done
     #
     # Check album tag
@@ -388,6 +442,41 @@ function _check_redquality() {
         done | sort -nr
 }
 
+
+################################################################################
+# Fix MD5 for flac files                                                       #
+################################################################################
+_fix_md5() {
+    local dryrun
+    local albumdir
+    local outdir
+    dryrun="${1}"
+    albumdir="$( realpath "${2}" )"
+    outdir="${3}"
+
+    [[ ! -z "${outdir}" ]] && outdir="$( realpath "${outdir}" )" || _show_help 1 "No output directory specified"
+    mkdir -p "${outdir}" || { echo "Could not create ${outdir}"; exit 1; }
+
+    find "${albumdir}" -name "*.flac" -print0 | \
+        while read -r -d $'\0' filepath
+        do
+            ## handle recursive directories
+            fout_relative_path="$( realpath "${filepath}" --relative-to="${albumdir}" )"
+            fout_path="${outdir}/${fout_relative_path}"
+            fout_dir="$( dirname "${fout_path}" )"
+            [[ ! -d "${fout_dir}" ]] && mkdir -p "${fout_dir}"
+            if [[ "$dryrun" == 1 ]]; then
+                echo "${filepath} ➜ ${fout_path}"
+            else
+                flac --best --no-preserve-modtime -o "${fout_path}" "${filepath}"
+            fi
+        done
+    # remove empty directories if this was a dryrun
+    if [[ "$dryrun" == 1 ]]; then
+        find "${outdir}" -type d -empty -delete
+    fi
+}
+
 ###############################
 # Input #######################
 ###############################
@@ -395,9 +484,12 @@ function _check_redquality() {
 
 g_album_path=""
 g_action=""
+g_output_dir=""
 g_show_common_tags=1
 g_show_unique_tags=1
+g_check_composer_tag=1
 g_recursive=0
+g_dryrun=0
 while [[ $# -gt 0 ]]; do
     key=${1}
     case ${key} in
@@ -416,6 +508,9 @@ while [[ $# -gt 0 ]]; do
             g_tag_keyval="${2}"
             shift
             shift;;
+        "--fix-md5")
+            g_action="fix_md5"
+            shift;;
         "-r" | "--recursive")
             g_recursive=1
             shift;;
@@ -425,8 +520,18 @@ while [[ $# -gt 0 ]]; do
         "--unique-only")
             g_show_common_tags=0
             shift;;
+        "--skip-composer")
+            g_check_composer_tag=0
+            shift;;
         "--no-fancy")
             FANCYFORMAT_FLAG=0
+            shift;;
+        "--out")
+            g_output_dir="${2}"
+            shift
+            shift;;
+        "--dryrun")
+            g_dryrun=1
             shift;;
         "-v" | "--verbose")
             VERBOSE_FLAG=1
@@ -461,9 +566,12 @@ case "${g_action}" in
             _show_tags "${g_album_path}" "${g_show_common_tags}" "${g_show_unique_tags}"
         ;;
     "check_redquality")
-        _check_redquality "${g_album_path}" "${g_recursive}"
+        _check_redquality "${g_album_path}" "${g_recursive}" "${g_check_composer_tag}"
         ;;
     "change_common_tags")
         _change_tags "${g_album_path}" "${g_tag_keyval}" "${g_recursive}"
+        ;;
+    "fix_md5")
+        _fix_md5 "${g_dryrun}" "${g_album_path}" "${g_output_dir}"
         ;;
 esac

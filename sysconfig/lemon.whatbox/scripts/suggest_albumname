@@ -27,11 +27,41 @@ _scrape_year() {
     echo "${year}"
 }
 
-echo "${albumpath}"
+_scrape_mediainfo() {
+    local albumpath
+    local mediainfo_output_string
+    albumpath="${1}"
+    mediainfo_output_string="${2}"
+    readarray -t infoarray < <(find "${albumpath}" -type f -exec bash -c '\
+                                 [[ "$( file -bi "$1" )" == *audio* ]]' bash {} \; -print0 | \
+                                 xargs -0 -I{} mediainfo --Output="${mediainfo_output_string}" {} | sort | uniq)
+    echo ${infoarray[@]}
+    if [[ "${#infoarray[@]}" == 0 ]]; then 
+        echo "Error"
+    elif [[ "${#infoarray[@]}" == 1 ]]; then
+        echo "${infoarray[1]}"
+    else
+        echo "Mixed"
+    fi
+}
+
+
 tempfile="$( mktemp -t common_tags.XXXXXX )"
+trap "rm -f \"${tempfile}\"" EXIT INT QUIT TERM
 redflac -f "${albumpath}" --show-tags -r --common-only --no-fancy > "${tempfile}"
 m_album="$( _scrape_albumname "${tempfile}" )"
 m_year="$( _scrape_year "${tempfile}" )"
+m_format="$( _scrape_mediainfo "${albumpath}" "Audio;%Format%" )"
+m_bitdepth="$( _scrape_mediainfo "${albumpath}" "Audio;%BitDepth%" )"
+m_samplingrate="$( _scrape_mediainfo "${albumpath}" "Audio;%SamplingRate%" )"
+
+m_quality=""
+[[ ! -z ${m_bitdepth} ]] && m_quality="${m_bitdepth}b"
+if [[ ! -z "${m_samplingrate}" ]]; then
+    m_samplingrate_k=$( echo "${m_samplingrate}" | awk '{ printf "%g", $1/1000}' )
+    [[ ! -z ${m_samplingrate_k} ]] && m_quality="${m_quality}-${m_samplingrate_k}kHz"
+fi
+
 
 # format name
 # mediainfo --Output="Audio;%Format%"
@@ -43,8 +73,9 @@ m_year="$( _scrape_year "${tempfile}" )"
 if [[ ! -z "${m_album}" ]]; then
     m_albumname="${m_album}"
     [[ ! -z "${m_year}" ]] && m_albumname="${m_albumname} (${m_year})"
-    m_albumname="${m_albumname} - FLAC"
-    echo "  ${m_albumname}"
+    [[ ! -z "${m_format}" ]] && m_albumname="${m_albumname} - ${m_format}"
+    [[ ! -z "${m_quality}" ]] && m_albumname="${m_albumname} {${m_quality}}"
+    echo "${m_albumname}"
 fi
 
 rm -f "${tempfile}"
