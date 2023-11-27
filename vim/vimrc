@@ -34,7 +34,7 @@ set fillchars+=vert:┃
 " Searching {{{
 set ignorecase          " ignore case when searching
 set incsearch           " search as characters are entered
-set hlsearch            " highlight all matches
+set nohlsearch          " clear last search highlight
 " }}}
 " Keys {{{
 set backspace=indent,eol,start " delete characters in the insert mode with backspace key

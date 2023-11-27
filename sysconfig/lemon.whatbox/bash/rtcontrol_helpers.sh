@@ -47,8 +47,12 @@ function _rt_is_metafile() {
 ################################################################################
 function rt-unregistered() {
     local outflag
-    outflag="${@:-"-qo'alias,name'"}"
-    rtcontrol 'message=/.*Failure.*Unregistered.*/' $outflag
+    outflag="${@}"
+    if [[ -z "${outflag}" ]]; then
+        rtcontrol 'message=/.*Failure.*Unregistered.*/' -qo'alias,name'
+    else
+        rtcontrol 'message=/.*Failure.*Unregistered.*/' $outflag
+    fi
 }
 
 

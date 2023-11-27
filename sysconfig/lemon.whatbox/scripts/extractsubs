@@ -1,0 +1,45 @@
+#!/bin/bash
+
+srcfilepath="$( realpath "${1}" )"
+srcfilename="$( basename "${srcfilepath}" )"
+srcfiledir="$( dirname "${srcfilepath}" )"
+srcfileprefix="${srcfilename%.mkv}"
+
+FFMPEG_B="ffmpeg -hide_banner -loglevel error"
+FFPROBE_B="ffprobe -loglevel quiet"
+
+# get english language subtitles
+subtitle_stream_indices="$( ${FFPROBE_B} \
+    -show_streams -select_streams s:m:language:eng "${srcfilepath}" | \
+    grep "index" | cut -d'=' -f2 )"
+
+# extract english subtitles
+for sindx in ${subtitle_stream_indices}; do
+    subtitle_stream="$( ${FFPROBE_B}   -show_streams -select_streams "${sindx}" "${srcfilepath}" )"
+    subtitle_tag_title=$( ${FFPROBE_B} -show_streams -select_streams "${sindx}" "${srcfilepath}" | \
+            grep "TAG:title" | cut -d"=" -f2 )
+    if [[ -z "${subtitle_tag_title}" ]]; then
+        subtitle_fileprefix="${srcfileprefix}.ENG"
+    else
+        subtitle_fileprefix="${srcfileprefix}.ENG"_"${subtitle_tag_title}"
+    fi
+    subtitle_srt_filepath="${srcfiledir}/${subtitle_fileprefix}.srt"
+	echo "Extract ${sindx} -> ${subtitle_fileprefix}.srt"
+    ${FFMPEG_B} -i "${srcfilepath}" -map 0:${sindx} -vn -an -c:s subrip "${subtitle_srt_filepath}"
+    #
+    # Re-encode 
+    #
+    tempfile="$( mktemp -t reencode_XXXXXX.srt )"
+    trap "rm -f \"${tempfile}\"" EXIT INT QUIT TERM
+    ${FFMPEG_B} -y -i "${subtitle_srt_filepath}" -c:s subrip "${tempfile}"
+    mv "${tempfile}" "${subtitle_srt_filepath}"
+    #
+    # Convert to webvtt format
+    #
+	echo "Extract ${sindx} -> ${subtitle_fileprefix}.vtt"
+    subtitle_vtt_filepath="${srcfiledir}/${subtitle_fileprefix}.vtt"
+    ${FFMPEG_B} -i "${subtitle_srt_filepath}" -c:s webvtt "${subtitle_vtt_filepath}"
+done
+
+# try language selector using map.
+# -map 0:s:m:language:eng
