@@ -43,7 +43,8 @@ loadbashrc() {
 }
 
 # load custom environment variables
-dotsrc "${CUSTOM_DOTFILES}"
+[[ -z "${CUSTOM_DOTFILES}" ]] && CUSTOM_DOTFILES=~/.custom_dotfiles/bashrc
+[[ -e "${CUSTOM_DOTFILES}" ]] && dotsrc "${CUSTOM_DOTFILES}"
 
 # Common initialization
 loadbashrc common
