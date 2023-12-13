@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+# logfiles
+logdir="${HOME}/var/log/housekeeping/$( date +"%Y-%m-%d" )"
+mkdir -p "${logdir}"
+
+# rTorrent session backup file
+session_bakfile="${HOME}/var/backup/rtorrent.session/rtsession.backup.$( date +'%Y.%m.%d-%H%M' ).tgz"
+rtxmlrpc -q session.save
+# tar cfz "${session_bakfile}" $( echo $(rtxmlrpc session.path)/ | tr -s / / )*.torrent*
+# a leading slash gives a warning # which I do not want
+# Attempt:
+# tar -C /path/to/directory does not work with wildcards
+#   https://superuser.com/q/266422
+# Solution: cd to path and run tar
+#   Group commands with brackets, so when they have finished
+#   you will still be in your original directory
+session_dir="$( echo $(rtxmlrpc session.path)/ | tr -s / / )"
+( cd "$( dirname "${session_dir}" )" && \
+  tar cfz "${session_bakfile}" "$( basename "${session_dir}")"/*.torrent* )
