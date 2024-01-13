@@ -9,6 +9,10 @@ logdir="${HOME}/local/etc/housekeeping/logs/$( date +"%Y-%m-%d" )"
 mkdir -p "${logdir}"
 unregistered_logfile="${logdir}/remove-unregistered.log"
 orphan_logfile="${logdir}/remove-orphan.log"
+fix_announce_logfile="${logdir}/fix-announce.log"
+
+do_clean=false
+[[ "${1}" == "--clean" ]] && do_clean=true
 
 # rTorrent session backup file
 session_bakfile="${HOME}/data/backup/rtorrent.session/rtsession.backup.$( date +'%Y.%m.%d-%H%M' ).tgz"
@@ -25,17 +29,34 @@ session_dir="$( echo $(rtxmlrpc session.path)/ | tr -s / / )"
 ( cd "$( dirname "${session_dir}" )" && \
   tar cfz "${session_bakfile}" "$( basename "${session_dir}")"/*.torrent* )
 
+rt-fix-bencoded-error >> "${fix_announce_logfile}" 2>&1
 rt-unregistered -qo'alias,name' --delete --yes >> "${unregistered_logfile}" 2>&1
 
 tgtdir1="${HOME}/data/media.library/btn-archive"
 tgtdir2="${HOME}/data/downloads/btn-spam"
-for tgt in "${tgtdir1}" "${tgtdir2}"; do
+tgtdir3="${HOME}/data/downloads/btn-spam-big"
+for tgt in "${tgtdir1}" "${tgtdir2}" "${tgtdir3}"; do
     rt-orphan "${tgt}" | while read -r -d$'\n' fpath;
     do
         echo "${fpath}" >> "${orphan_logfile}"
         rm -rf "${fpath}"
     done
 done
+
+# Remove btn-spam-big after seeding completion
+# Before cull, announce to tracker
+function _announce_and_cull() {
+    local rt_selection_string
+    rt_selection_string="${@}"
+    # Do not batch exec tracker announce
+    # rtcontrol ${rt_selection_string} --exec "d.tracker_announce={{item.hash}}" --yes
+    rtcontrol $( eval echo ${rt_selection_string} ) -qo'hash' | while read -r -d $'\n' mhash; do rtcontrol hash=$mhash --exec "d.tracker_announce={{item.hash}}" --yes; done
+    rtcontrol $( eval echo ${rt_selection_string} ) --cull --yes 
+}
+if [[ "${do_clean}" == "true" ]]; then
+    _announce_and_cull path=/.*banskt.data.downloads.btn-spam-big.*/  is_open=y is_complete=y seedtime=+125h
+    _announce_and_cull path=/.*banskt.data.downloads.btn-spam-big.*/  is_open=y is_complete=y ratio=+1.02
+fi
 
 # Media Permission for Emby / Jellyfin
 set-media-permission

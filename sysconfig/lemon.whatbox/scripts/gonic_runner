@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+if (! pgrep -fx "/home/banskt/usr/go/bin/gonic -config-path /home/banskt/.config/gonic/gonic.cfg" > /dev/null)
+then
+    SESSION_SECRET=$( head /dev/urandom | tr -dc A-Za-z0-9 | head -c10 ) \
+        screen -dmS gonic /home/banskt/usr/go/bin/gonic \
+            -config-path /home/banskt/.config/gonic/gonic.cfg
+fi
