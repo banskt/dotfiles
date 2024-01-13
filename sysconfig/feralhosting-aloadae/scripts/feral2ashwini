@@ -89,9 +89,12 @@ function _collect_metafiles() {
     local fpath
     local relpath
     local rtmpath
+    local resolve_subdirectories
     datapath="${1%/}" # remove slash from end of path, if present
     metapath="${2%/}" # remove slash from end of path, if present
     rt_session_dir=$( realpath "$( rtxmlrpc session.path )" )
+    resolve_subdirectories="true"
+    [[ "${3}" == "--no_resolve_subdirectory" ]] && resolve_subdirectories="false"
 
     # clean up any existing directory from previous / failed runs
     # start fresh every time
@@ -134,23 +137,25 @@ function _collect_metafiles() {
     # this can be done by searching for names (instead of path) in rtorrent!
     # Better solution is: find . -samefile
     # but that is also more convoluted
-    if [[ -d "${datapath}" ]]; then
-        find "${datapath}/" -type f -print0 | while read -r -d $'\0' fpath
-        do
-            fname=$( basename "${fpath}" )
-            name_selector=$( _rt_name_selector "${fname}" )
-            mhash=$( rtcontrol -qo 'hash' "${name_selector}")
-            # if there is an existing hash
-            if [[ "${mhash}" =~ [0-9a-fA-F]{40} ]]; then
-                # which is not already included
-                if ! grep -q "${mhash}" "${metapath}/info.txt"; then
-                    relpath=$( realpath "${fpath}" --relative-to="${data_parentdir}" )
-                    rtmpath="${rt_session_dir}"/"${mhash}.torrent"
-                    cp -f "${rtmpath}" "${metapath}/"
-                    echo -e "${mhash}\t${relpath}" >> "${metapath}/info.txt"
+    if [[ "${resolve_subdirectories}" == "true" ]]; then
+        if [[ -d "${datapath}" ]]; then
+            find "${datapath}/" -type f -print0 | while read -r -d $'\0' fpath
+            do
+                fname=$( basename "${fpath}" )
+                name_selector=$( _rt_name_selector "${fname}" )
+                mhash=$( rtcontrol -qo 'hash' "${name_selector}")
+                # if there is an existing hash
+                if [[ "${mhash}" =~ [0-9a-fA-F]{40} ]]; then
+                    # which is not already included
+                    if ! grep -q "${mhash}" "${metapath}/info.txt"; then
+                        relpath=$( realpath "${fpath}" --relative-to="${data_parentdir}" )
+                        rtmpath="${rt_session_dir}"/"${mhash}.torrent"
+                        cp -f "${rtmpath}" "${metapath}/"
+                        echo -e "${mhash}\t${relpath}" >> "${metapath}/info.txt"
+                    fi
                 fi
-            fi
-        done
+            done
+        fi
     fi
     sleep 1
 
