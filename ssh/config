@@ -147,7 +147,8 @@ Host bigferal
 
 # iHostArt / Romania Storage VPS
 Host ashwini
-    Hostname 109.122.221.228
+    #Hostname 109.122.221.228
+    Hostname 94.177.106.128
     User banskt
     Port 44933
     PreferredAuthentications publickey,password
