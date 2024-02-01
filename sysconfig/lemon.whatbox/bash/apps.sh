@@ -12,3 +12,8 @@ export PATH="${GOPATH}/bin:${PATH}"
 # Dotnet (required for Emby)
 export DOTNET_ROOT="${HOME}/usr/src/dotnet/6.0.10"
 export PATH="${DOTNET_ROOT}:${PATH}"
+
+# Music Organizer (bash scripts)
+export PATH="${HOME}/usr/src/music-organizer/bin:${PATH}"
+export MUSICBOX_LIBRARY_PATH="${HOME}/data/media.library/audio/music"
+export MUSICBOX_TRUMP_PATH="${HOME}/data/media.library/audio/staging"
