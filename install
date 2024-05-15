@@ -85,7 +85,7 @@ function backup_and_link() {
         e_success "Linking ${__dest} to ${__dotfile}."
         if ! _dryrun; then
             cd ${__destdir}
-            ln -s --force ${__dotfile} ${__destbase}
+            ln -s -f ${__dotfile} ${__destbase}
             cd ${HOME}
         fi
     fi
@@ -105,8 +105,18 @@ backup_and_link .bashrc bash/bashrc
 backup_and_link .ssh/config ssh/config
 backup_and_link .vimrc vim/vimrc
 backup_and_link .vim vim/dotvim
-backup_and_link .jupyter/custom/custom.css python/jupyter_custom.css
-backup_and_link .condarc python/condarc
+#backup_and_link .jupyter/custom/custom.css python/jupyter_custom.css
+#backup_and_link .condarc python/condarc
+
+# Backup bash_history if it exists
+if [[ -f ".bash_history" ]]; then
+    e_arrow "Backing up .bash_history"
+    BACKUPFLAG=1
+    if ! _dryrun; then
+        [[ ! -d "${BACKUPDIR}" ]] && mkdir -p ${BACKUPDIR}
+        [[ -d "${BACKUPDIR}" ]] && mv .bash_history ${BACKUPDIR}/.bash_history
+    fi
+fi
 
 if [[ "${BACKUPFLAG}" == "1" ]]; then
     echo -e "\nBackups were moved to ${BACKUPDIR}"
