@@ -9,12 +9,19 @@
 # more host-specific declarations should be given near the 
 # beginning of the file, and general defaults at the end. 
 #
-Host nygc
-    Hostname pe2-login
+# Host nygc
+#     Hostname pe2-login
+#     User sbanerjee
+#     PreferredAuthentications password
+#     PasswordAuthentication yes 
+#     PubkeyAuthentication no
+
+Host nygc pennstation
+    Hostname pennstation.nygenome.org
     User sbanerjee
-    PreferredAuthentications password
-    PasswordAuthentication yes 
-    PubkeyAuthentication no
+    IdentityFile ~/.ssh/nygc_key
+    PreferredAuthentications publickey,password
+    PubkeyAuthentication yes
 
 Host rcc 
     Hostname midway2.rcc.uchicago.edu
