@@ -1,0 +1,44 @@
+---
+title: Setup Torrents
+---
+
+# XMLRPC
+```bash
+git clone git@github.com:mirror/xmlrpc-c.git
+cd xmlrpc-c/stable
+./configure --prefix=/opt/xmlrpc-c --disable-cplusplus --disable-wininet-client --disable-libwww-client --disable-abyss-server --disable-cgi-server
+make -j2
+sudo make install
+```
+
+# libtorrent
+
+```bash
+sudo apt install libtool
+wget https://github.com/rakshasa/libtorrent/archive/refs/tags/v0.13.8.tar.gz
+tar zxf v0.13.8.tar.gz
+cd libtorrent-0.13.8/
+./autogen.sh
+module load openssl/3.1.3
+export OPENSSL_CFLAGS='-I/opt/openssl/3.1.3/include -L/opt/openssl/3.1.3/lib64 -lssl -lcrypto -Wl,-rpath,/opt/openssl/3.1.3/lib64'
+export OPENSSL_LIBS='/opt/openssl/3.1.3/lib64'
+./configure --prefix=/opt/libtorrent/0.13.8 --disable-debug --with-posix-fallocate
+make -j2
+sudo make install
+```
+
+# rTorrent
+
+```bash
+wget https://github.com/rakshasa/rtorrent-archive/raw/master/rtorrent-0.9.8.tar.gz
+tar -zxf rtorrent-0.9.8.tar.gz
+
+sudo apt install libncurses-dev 
+./autogen.sh
+export DEPENDENCIES_CFLAGS='-I/opt/libtorrent/0.13.8/include -I/opt/xmlrpc-c/include'
+export DEPENDENCIES_LIBS='-L/opt/libtorrent/0.13.8/lib -L/opt/xmlrpc-c/lib'
+./configure --prefix=/home/banskt/local/apps/rtorrent/0.9.8 --disable-debug --with-xmlrpc-c=/opt/xmlrpc-c/bin/xmlrpc-c-config
+
+```
+  - [Installation of xmlrpc-c, libtorrent and rtorrent](https://www.reddit.com/r/seedboxes/comments/e2p4mv/install_rtorrent_libtorrent_and_xmlrpcc_from/)
+  - 
