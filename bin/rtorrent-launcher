@@ -65,7 +65,9 @@ _do_start() {
         _is_verbose && echo "Starting rTorrent."
         _start_rtorrent_with_screen
     else
-        _is_rtorrent_running && _is_verbose && echo "rTorrent is already running."
+        _is_rtorrent_running && _is_screen_running && _is_verbose && echo "rTorrent is already running."
+        _is_rtorrent_running && ! _is_screen_running \
+            && echo "Screen is not running, but rtorrent.lock exists."
         ! _is_rtorrent_running && _is_screen_runinng \
             && echo "No rTorrent daemon found, but screen \"${SCREEN_NAME}\" is already running."
     fi
