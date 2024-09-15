@@ -1,5 +1,6 @@
 auto_activate_base: false
 channels:
   - conda-forge
-  - defaults
+  - nodefaults
+#  - defaults # BAD ! Not supported by mamba https://mamba.readthedocs.io/en/latest/user_guide/troubleshooting.html
 show_channel_urls: true
