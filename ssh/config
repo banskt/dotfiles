@@ -16,8 +16,15 @@
 #     PasswordAuthentication yes 
 #     PubkeyAuthentication no
 
-Host nygc pennstation
+Host pennstation
     Hostname pennstation.nygenome.org
+    User sbanerjee
+    IdentityFile ~/.ssh/nygc_key
+    PreferredAuthentications publickey,password
+    PubkeyAuthentication yes
+
+Host nygc
+    Hostname pe2-login.c.nygenome.org
     User sbanerjee
     IdentityFile ~/.ssh/nygc_key
     PreferredAuthentications publickey,password

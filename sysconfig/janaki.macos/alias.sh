@@ -4,3 +4,6 @@
 export PATH="${PATH}:/usr/local/texlive/2024/bin/universal-darwin"
 export MANPATH="${MANPATH}:/usr/local/texlive/2024/texmf-dist/doc/man"
 export INFOPATH="${INFOPATH}:/usr/local/texlive/2024/texmf-dist/doc/man"
+
+# PLINK
+export PATH="${PATH}:/Users/sbanerjee/Downloads/plink/1.9"
