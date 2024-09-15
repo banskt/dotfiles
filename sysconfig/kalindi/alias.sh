@@ -27,6 +27,7 @@ function lemp() {
 
 # Launch MyCrypto Wallet
 alias mycrypto="/home/saikat/Downloads/apps/crypto/mycrypto/linux-x86-64_1.7.13_MyCrypto.AppImage"
+
 # Load enviroments
 alias load-Rmkl='module load gcc/10.2.0 intel/mkl/2020/4.304 R/mkl/4.0.3 RStudio/1.4.1106'
 alias unload-Rmkl='module unload RStudio/1.4.1106 R/mkl/4.0.3'
@@ -45,18 +46,3 @@ alias mountlemonwatch="sshfs whatbox:watch /home/saikat/whatboxDrive -o idmap=us
 alias umountlemon="fusermount -u /home/saikat/whatboxDrive"
 alias xcopy="xclip -selection clipboard <"
 alias tmm="/home/saikat/Downloads/apps/tinyMediaManager/tinyMediaManager/tinyMediaManager"
-
-# >>> conda initialize >>>
-# !! Contents within this block are managed by 'conda init' !!
-__conda_setup="$('/opt/miniconda3/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"
-if [ $? -eq 0 ]; then
-    eval "$__conda_setup"
-else
-    if [ -f "/opt/miniconda3/etc/profile.d/conda.sh" ]; then
-        . "/opt/miniconda3/etc/profile.d/conda.sh"
-    else
-        export PATH="/opt/miniconda3/bin:$PATH"
-    fi
-fi
-unset __conda_setup
-# <<< conda initialize <<<
