@@ -13,10 +13,14 @@ Note: Run all commands from the `$HOME` directory.
 
   2. Run the `install` script.
   ```
-  source ~/.dotfiles/install
+  ~/.dotfiles/install
   chmod 700 ~/.ssh
   chmod 644 ~/.ssh/config
   ```
+  Note that `source ~/.dotfiles/install` will not work.
+
+  **MacOS + iTerm2.** Since iTerm2 acts as a login shell, 
+  you need to create a separate file `~/.bash_profile` and include `source ~/.bashrc` in that file.
 
   3. Create the SSH keys. For example,
   ```

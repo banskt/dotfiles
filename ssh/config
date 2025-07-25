@@ -24,7 +24,7 @@ Host pennstation
     PubkeyAuthentication yes
 
 Host nygc
-    Hostname pe2-login.c.nygenome.org
+    Hostname ne1-login.c.nygenome.org
     User sbanerjee
     IdentityFile ~/.ssh/nygc_key
     PreferredAuthentications publickey,password
